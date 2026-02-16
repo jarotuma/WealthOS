@@ -1,0 +1,187 @@
+/* ── Reset & Base ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #f9f9fb;
+  --surface:   #ffffff;
+  --surface2:  #f2f2f7;
+  --border:    rgba(0, 0, 0, 0.07);
+  --shadow:    0 2px 20px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
+  --text:      #1c1c1e;
+  --text2:     #6e6e73;
+  --text3:     #aeaeb2;
+  --blue:      #0071e3;
+  --blue-bg:   #e8f1fc;
+  --green:     #34c759;
+  --green-bg:  #e5f8eb;
+  --red:       #ff3b30;
+  --red-bg:    #fff0ef;
+  --radius:    16px;
+  --radius-sm: 10px;
+}
+
+.dark {
+  --bg:        #0c0c0e;
+  --surface:   #1c1c1e;
+  --surface2:  #2c2c2e;
+  --border:    rgba(255, 255, 255, 0.08);
+  --shadow:    0 2px 20px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.2);
+  --text:      #f5f5f7;
+  --text2:     #98989d;
+  --text3:     #48484a;
+  --blue:      #2196f3;
+  --blue-bg:   rgba(33, 150, 243, 0.12);
+  --green-bg:  rgba(52, 199, 89, 0.12);
+  --red-bg:    rgba(255, 59, 48, 0.12);
+}
+
+html { font-size: 16px; }
+
+body {
+  font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* ── Scrollbar (webkit) ───────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+/* ── Typography helpers ──────────────────────────────────── */
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Utility ─────────────────────────────────────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ── Toastr-style notification ───────────────────────────── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  background: var(--text); color: var(--bg);
+  font-size: 13px; font-weight: 600;
+  padding: 10px 18px; border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  animation: slideUp 0.25s ease;
+}
+.toast.error { background: var(--red); color: white; }
+.toast.success { background: var(--green); color: white; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.spinner {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--blue);
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Page layout ─────────────────────────────────────────── */
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+/* ── Section label ───────────────────────────────────────── */
+.section-label {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.4px;
+  color: var(--text); margin: 28px 0 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.section-label small {
+  font-size: 13px; font-weight: 600; color: var(--text3);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Card ─────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.card-title {
+  font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-total {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px; font-weight: 500;
+}
+.card-total.green { color: var(--green); }
+.card-total.red   { color: var(--red); }
+
+/* ── Tag badge ────────────────────────────────────────────── */
+.tag {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 8px; border-radius: 99px;
+}
+.tag.green { background: var(--green-bg); color: var(--green); }
+.tag.red   { background: var(--red-bg);   color: var(--red); }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.pill-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--surface2); border: none;
+  color: var(--text2); font-family: inherit;
+  font-size: 12px; font-weight: 600;
+  padding: 6px 12px; border-radius: 99px;
+  cursor: pointer; transition: all 0.15s;
+  white-space: nowrap;
+}
+.pill-btn:hover { background: var(--border); color: var(--text); }
+.pill-btn.blue  { background: var(--blue); color: white; }
+.pill-btn.blue:hover { opacity: 0.88; }
+.pill-btn svg   { width: 13px; height: 13px; flex-shrink: 0; }
+
+.btn-primary {
+  background: var(--blue); color: white; border: none;
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary.red  { background: var(--red); }
+
+.btn-ghost {
+  background: none; border: 1px solid var(--border);
+  color: var(--text2); font-family: inherit;
+  font-size: 12px; font-weight: 600;
+  padding: 7px 12px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-ghost:hover { border-color: var(--text3); color: var(--text); }
+
+/* ── Form inputs ─────────────────────────────────────────── */
+.inp {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  padding: 8px 12px; border-radius: var(--radius-sm);
+  outline: none; transition: border-color 0.15s;
+  width: 100%;
+}
+.inp:focus { border-color: var(--blue); }
+.inp.mono  { font-family: 'JetBrains Mono', monospace; }
+select.inp { cursor: pointer; }
