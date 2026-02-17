@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { loadAll, addItem, updateItem, deleteItem, saveGoals } from "../api/sheets";
+import { loadAll, addItem, updateItem, deleteItem, saveGoals, saveAll } from "../api/sheets";
 import { todayYM } from "../utils/format";
 
 const DEFAULT_CATS_A = ["Bankovní účet","Akcie","ETF","Krypto","Nemovitost","Automobil","Dluhopisy","Zlato / kovy","Hotovost","Jiné investice","Ostatní"];
@@ -13,27 +13,24 @@ function loadLS() {
 function saveLS(data) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {}
 }
-
-// Zajistí, že každá položka má history pole
 function ensureHistory(items) {
-  return items.map(item => {
-    if (!item.history) {
+  return (items || []).map(item => {
+    if (!item.history || !Array.isArray(item.history)) {
       return { ...item, history: item.date && item.value ? [{ date: item.date, value: Number(item.value) }] : [] };
     }
     return item;
   });
 }
-
-// Přidá nebo aktualizuje záznam v historii položky
 function upsertHistory(item, date, value) {
   const history = item.history || [];
   const exists = history.find(h => h.date === date);
-  const newHistory = exists
+  const next = exists
     ? history.map(h => h.date === date ? { date, value: Number(value) } : h)
     : [...history, { date, value: Number(value) }];
-  // Seřadit chronologicky
-  return newHistory.sort((a, b) => a.date.localeCompare(b.date));
+  return next.sort((a, b) => a.date.localeCompare(b.date));
 }
+
+const SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || "";
 
 export function useData() {
   const [aktiva,   setAktiva]   = useState([]);
@@ -48,21 +45,14 @@ export function useData() {
 
   const showToast = useCallback((msg, type = "success") => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 4000);
   }, []);
 
   // ── Init ──────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
-      try {
-        const data = await loadAll();
-        if (data && (data.aktiva?.length || data.pasiva?.length)) {
-          setAktiva(ensureHistory(data.aktiva || []));
-          setPasiva(ensureHistory(data.pasiva || []));
-          setGoals(data.goals || []);
-          setSheetsOk(true);
-        } else throw new Error("prázdná");
-      } catch {
+      if (!SCRIPT_URL) {
+        console.warn("WealthOS: VITE_APPS_SCRIPT_URL není nastaveno, offline mód");
         const ls = loadLS();
         if (ls) {
           setAktiva(ensureHistory(ls.aktiva || []));
@@ -71,38 +61,103 @@ export function useData() {
           setCatsA(ls.catsA || DEFAULT_CATS_A);
           setCatsP(ls.catsP || DEFAULT_CATS_P);
         }
-      } finally { setLoading(false); }
+        setLoading(false);
+        return;
+      }
+
+      try {
+        console.log("WealthOS: Načítám data ze Sheets...");
+        const data = await loadAll();
+        console.log("WealthOS: Sheets odpověděl:", data);
+        setSheetsOk(true);
+
+        const hasSheets = data?.aktiva?.length || data?.pasiva?.length || data?.goals?.length;
+        if (hasSheets) {
+          setAktiva(ensureHistory(data.aktiva || []));
+          setPasiva(ensureHistory(data.pasiva || []));
+          setGoals(data.goals || []);
+          console.log("WealthOS: Data načtena ze Sheets");
+        } else {
+          // Sheets prázdné — použij lokální data
+          const ls = loadLS();
+          if (ls) {
+            setAktiva(ensureHistory(ls.aktiva || []));
+            setPasiva(ensureHistory(ls.pasiva || []));
+            setGoals(ls.goals || []);
+            setCatsA(ls.catsA || DEFAULT_CATS_A);
+            setCatsP(ls.catsP || DEFAULT_CATS_P);
+            console.log("WealthOS: Sheets prázdné, používám lokální data");
+          }
+        }
+      } catch (err) {
+        console.error("WealthOS: Sheets nedostupné:", err.message);
+        setSheetsOk(false);
+        const ls = loadLS();
+        if (ls) {
+          setAktiva(ensureHistory(ls.aktiva || []));
+          setPasiva(ensureHistory(ls.pasiva || []));
+          setGoals(ls.goals || []);
+          setCatsA(ls.catsA || DEFAULT_CATS_A);
+          setCatsP(ls.catsP || DEFAULT_CATS_P);
+        }
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
+  // Persistuj do localStorage
   useEffect(() => {
     if (!loading) saveLS({ aktiva, pasiva, goals, catsA, catsP });
   }, [aktiva, pasiva, goals, catsA, catsP, loading]);
 
-  // ── Sync helper ───────────────────────────────────────────
+  // ── Sync helper — vždy zkusí Sheets, bez gate ────────────
   const sync = useCallback(async (apiCall, localFn, msg) => {
+    // 1. Okamžitý lokální update
     localFn();
-    if (!sheetsOk) return;
+
+    // 2. Pokud není URL, přeskoč
+    if (!SCRIPT_URL) {
+      console.log("WealthOS: Bez Sheets URL, uloženo jen lokálně");
+      return;
+    }
+
     setSyncing(true);
-    try { await apiCall(); showToast(msg); }
-    catch (e) { showToast("Sheets: " + e.message, "error"); }
-    finally { setSyncing(false); }
-  }, [sheetsOk, showToast]);
+    try {
+      console.log("WealthOS: Ukládám do Sheets...");
+      await apiCall();
+      setSheetsOk(true);
+      showToast(msg);
+      console.log("WealthOS: Uloženo do Sheets ✓", msg);
+    } catch (err) {
+      console.error("WealthOS: Sheets chyba:", err.message);
+      setSheetsOk(false);
+      showToast("Sheets chyba: " + err.message, "error");
+    } finally {
+      setSyncing(false);
+    }
+  }, [showToast]); // ZÁMĚRNĚ bez sheetsOk — vždy zkusí
 
   // ── AKTIVA ─────────────────────────────────────────────────
   const addAktivum = useCallback((item) => {
     const withHistory = { ...item, history: [{ date: item.date, value: Number(item.value) }] };
-    sync(() => addItem("a", withHistory), () => setAktiva(p => [...p, withHistory]), "Aktivum přidáno");
+    sync(
+      () => addItem("a", withHistory),
+      () => setAktiva(p => [...p, withHistory]),
+      "Aktivum přidáno ✓"
+    );
   }, [sync]);
 
   const updateAktivum = useCallback((item) => {
-    // Aktualizuje hodnotu + přidá/updatuje záznam v historii
     const newHistory = upsertHistory(item, item.date, item.value);
     const updated = { ...item, history: newHistory };
-    sync(() => updateItem("a", updated), () => setAktiva(p => p.map(x => x.id === item.id ? updated : x)), "Aktivum aktualizováno");
+    sync(
+      () => updateItem("a", updated),
+      () => setAktiva(p => p.map(x => x.id === item.id ? updated : x)),
+      "Aktivum aktualizováno ✓"
+    );
   }, [sync]);
 
-  // Editace záznamu přímo v historii (jen date + value záznamu)
   const updateAktivumHistory = useCallback((itemId, oldDate, newDate, newValue) => {
     setAktiva(p => p.map(item => {
       if (item.id !== itemId) return item;
@@ -110,11 +165,17 @@ export function useData() {
         .filter(h => h.date !== oldDate)
         .concat({ date: newDate, value: Number(newValue) })
         .sort((a, b) => a.date.localeCompare(b.date));
-      // Aktualizuj i current value pokud jde o nejnovější záznam
       const latest = history[history.length - 1];
-      return { ...item, history, value: latest.value, date: latest.date };
+      const updated = { ...item, history, value: latest.value, date: latest.date };
+      // Sync do Sheets
+      if (SCRIPT_URL) {
+        updateItem("a", updated).catch(err =>
+          console.error("WealthOS: History sync chyba:", err.message)
+        );
+      }
+      return updated;
     }));
-    showToast("Záznam aktualizován");
+    showToast("Záznam aktualizován ✓");
   }, [showToast]);
 
   const deleteAktivumHistory = useCallback((itemId, date) => {
@@ -122,25 +183,43 @@ export function useData() {
       if (item.id !== itemId) return item;
       const history = (item.history || []).filter(h => h.date !== date);
       const latest = history[history.length - 1];
-      return { ...item, history, value: latest?.value || item.value, date: latest?.date || item.date };
+      const updated = { ...item, history, value: latest?.value || item.value, date: latest?.date || item.date };
+      if (SCRIPT_URL) {
+        updateItem("a", updated).catch(err =>
+          console.error("WealthOS: History delete sync chyba:", err.message)
+        );
+      }
+      return updated;
     }));
-    showToast("Záznam smazán");
+    showToast("Záznam smazán ✓");
   }, [showToast]);
 
   const deleteAktivum = useCallback((id) => {
-    sync(() => deleteItem("a", id), () => setAktiva(p => p.filter(x => x.id !== id)), "Aktivum smazáno");
+    sync(
+      () => deleteItem("a", id),
+      () => setAktiva(p => p.filter(x => x.id !== id)),
+      "Aktivum smazáno ✓"
+    );
   }, [sync]);
 
   // ── PASIVA ─────────────────────────────────────────────────
   const addPasivum = useCallback((item) => {
     const withHistory = { ...item, history: [{ date: item.date, value: Number(item.value) }] };
-    sync(() => addItem("p", withHistory), () => setPasiva(p => [...p, withHistory]), "Pasivum přidáno");
+    sync(
+      () => addItem("p", withHistory),
+      () => setPasiva(p => [...p, withHistory]),
+      "Pasivum přidáno ✓"
+    );
   }, [sync]);
 
   const updatePasivum = useCallback((item) => {
     const newHistory = upsertHistory(item, item.date, item.value);
     const updated = { ...item, history: newHistory };
-    sync(() => updateItem("p", updated), () => setPasiva(p => p.map(x => x.id === item.id ? updated : x)), "Pasivum aktualizováno");
+    sync(
+      () => updateItem("p", updated),
+      () => setPasiva(p => p.map(x => x.id === item.id ? updated : x)),
+      "Pasivum aktualizováno ✓"
+    );
   }, [sync]);
 
   const updatePasivumHistory = useCallback((itemId, oldDate, newDate, newValue) => {
@@ -151,9 +230,15 @@ export function useData() {
         .concat({ date: newDate, value: Number(newValue) })
         .sort((a, b) => a.date.localeCompare(b.date));
       const latest = history[history.length - 1];
-      return { ...item, history, value: latest.value, date: latest.date };
+      const updated = { ...item, history, value: latest.value, date: latest.date };
+      if (SCRIPT_URL) {
+        updateItem("p", updated).catch(err =>
+          console.error("WealthOS: History sync chyba:", err.message)
+        );
+      }
+      return updated;
     }));
-    showToast("Záznam aktualizován");
+    showToast("Záznam aktualizován ✓");
   }, [showToast]);
 
   const deletePasivumHistory = useCallback((itemId, date) => {
@@ -161,29 +246,52 @@ export function useData() {
       if (item.id !== itemId) return item;
       const history = (item.history || []).filter(h => h.date !== date);
       const latest = history[history.length - 1];
-      return { ...item, history, value: latest?.value || item.value, date: latest?.date || item.date };
+      const updated = { ...item, history, value: latest?.value || item.value, date: latest?.date || item.date };
+      if (SCRIPT_URL) {
+        updateItem("p", updated).catch(err =>
+          console.error("WealthOS: History delete sync chyba:", err.message)
+        );
+      }
+      return updated;
     }));
-    showToast("Záznam smazán");
+    showToast("Záznam smazán ✓");
   }, [showToast]);
 
   const deletePasivum = useCallback((id) => {
-    sync(() => deleteItem("p", id), () => setPasiva(p => p.filter(x => x.id !== id)), "Pasivum smazáno");
+    sync(
+      () => deleteItem("p", id),
+      () => setPasiva(p => p.filter(x => x.id !== id)),
+      "Pasivum smazáno ✓"
+    );
   }, [sync]);
 
   // ── GOALS ──────────────────────────────────────────────────
   const updateGoals = useCallback((newGoals) => {
-    sync(() => saveGoals(newGoals), () => setGoals(newGoals), "Cíle uloženy");
+    sync(
+      () => saveGoals(newGoals),
+      () => setGoals(newGoals),
+      "Cíle uloženy ✓"
+    );
   }, [sync]);
 
   // ── KATEGORIE ─────────────────────────────────────────────
-  const addCat    = useCallback((type, name) => { if (type==="a") setCatsA(p=>[...p,name]); else setCatsP(p=>[...p,name]); }, []);
-  const deleteCat = useCallback((type, name) => { if (type==="a") setCatsA(p=>p.filter(c=>c!==name)); else setCatsP(p=>p.filter(c=>c!==name)); }, []);
+  const addCat    = useCallback((type, name) => {
+    if (type === "a") setCatsA(p => [...p, name]);
+    else setCatsP(p => [...p, name]);
+  }, []);
+  const deleteCat = useCallback((type, name) => {
+    if (type === "a") setCatsA(p => p.filter(c => c !== name));
+    else setCatsP(p => p.filter(c => c !== name));
+  }, []);
 
   // ── EXPORT / IMPORT ────────────────────────────────────────
   const exportData = useCallback(() => {
     const blob = new Blob([JSON.stringify({ aktiva, pasiva, goals, catsA, catsP }, null, 2)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "wealthos-backup.json"; a.click();
-    showToast("Data exportována");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `wealthos-backup-${todayYM()}.json`;
+    a.click();
+    showToast("Data exportována ✓");
   }, [aktiva, pasiva, goals, catsA, catsP, showToast]);
 
   const importData = useCallback((file) => {
@@ -196,7 +304,7 @@ export function useData() {
         if (d.goals)   setGoals(d.goals);
         if (d.catsA)   setCatsA(d.catsA);
         if (d.catsP)   setCatsP(d.catsP);
-        showToast("Data importována");
+        showToast("Data importována ✓");
       } catch { showToast("Chyba při importu", "error"); }
     };
     r.readAsText(file);
@@ -207,24 +315,22 @@ export function useData() {
   const totalP   = pasiva.reduce((s, i) => s + Number(i.value), 0);
   const netWorth = totalA - totalP;
 
-  // Zjisti předchozí čisté jmění (předposlední měsíc v historii)
   const allDates = [...new Set([
-    ...aktiva.flatMap(i => (i.history||[]).map(h => h.date)),
-    ...pasiva.flatMap(i => (i.history||[]).map(h => h.date)),
+    ...aktiva.flatMap(i => (i.history || []).map(h => h.date)),
+    ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
   ])].sort();
   const prevMonth = allDates.length >= 2 ? allDates[allDates.length - 2] : null;
   const prevNW = prevMonth
-    ? aktiva.reduce((s,i) => { const h=(i.history||[]).find(x=>x.date===prevMonth); return s+(h?h.value:0); }, 0)
-    - pasiva.reduce((s,i) => { const h=(i.history||[]).find(x=>x.date===prevMonth); return s+(h?h.value:0); }, 0)
+    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
+    - pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
     : netWorth;
   const diff    = netWorth - prevNW;
   const diffPct = prevNW !== 0 ? ((diff / prevNW) * 100).toFixed(1) : "0.0";
 
-  // Všechny dostupné měsíce v historii (pro History stránku)
   const availableMonths = [...new Set([
-    ...aktiva.flatMap(i => (i.history||[]).map(h => h.date)),
-    ...pasiva.flatMap(i => (i.history||[]).map(h => h.date)),
-  ])].sort().reverse(); // nejnovější první
+    ...aktiva.flatMap(i => (i.history || []).map(h => h.date)),
+    ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
+  ])].sort().reverse();
 
   return {
     aktiva, pasiva, goals, catsA, catsP,
