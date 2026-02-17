@@ -1,263 +1,242 @@
 import { useState, useEffect, useCallback } from "react";
-import { loadAll, addItem, updateItem, deleteItem, addSnapshot, saveGoals } from "../api/sheets";
+import { loadAll, addItem, updateItem, deleteItem, saveGoals } from "../api/sheets";
 import { todayYM } from "../utils/format";
 
-// ── Výchozí demo data ─────────────────────────────────────────
-const DEFAULT_AKTIVA = [
-  { id:"1", icon:"🏦", name:"Běžný účet",       cat:"Bankovní účet", value:142000,  color:"#34c759", date:"2026-02" },
-  { id:"2", icon:"📈", name:"Akciové portfolio", cat:"Akcie",         value:380000,  color:"#5ac8fa", date:"2026-02" },
-  { id:"3", icon:"₿",  name:"Bitcoin",           cat:"Krypto",        value:210000,  color:"#ff9500", date:"2026-01" },
-  { id:"4", icon:"🏠", name:"Byt Praha 3",       cat:"Nemovitost",    value:4200000, color:"#0071e3", date:"2026-02" },
-  { id:"5", icon:"🚗", name:"Škoda Octavia",     cat:"Automobil",     value:320000,  color:"#af52de", date:"2025-12" },
-];
-const DEFAULT_PASIVA = [
-  { id:"6", icon:"🏦", name:"Hypotéka — byt", cat:"Hypotéka",       value:2800000, color:"#ff3b30", date:"2026-02" },
-  { id:"7", icon:"💳", name:"Kreditní karta", cat:"Kreditní karta", value:18000,   color:"#ff6b6b", date:"2026-02" },
-  { id:"8", icon:"🚙", name:"Leasing auto",   cat:"Leasing",        value:95000,   color:"#ff9f43", date:"2026-01" },
-];
-const DEFAULT_HISTORY = [
-  { date:"2025-03", netWorth:1340000, totalA:4620000, totalP:3280000, label:"3/25" },
-  { date:"2025-04", netWorth:1390000, totalA:4700000, totalP:3310000, label:"4/25" },
-  { date:"2025-05", netWorth:1420000, totalA:4740000, totalP:3320000, label:"5/25" },
-  { date:"2025-06", netWorth:1380000, totalA:4690000, totalP:3310000, label:"6/25" },
-  { date:"2025-07", netWorth:1450000, totalA:4780000, totalP:3330000, label:"7/25" },
-  { date:"2025-08", netWorth:1510000, totalA:4850000, totalP:3340000, label:"8/25" },
-  { date:"2025-09", netWorth:1560000, totalA:4900000, totalP:3340000, label:"9/25" },
-  { date:"2025-10", netWorth:1590000, totalA:4940000, totalP:3350000, label:"10/25" },
-  { date:"2025-11", netWorth:1620000, totalA:4960000, totalP:3340000, label:"11/25" },
-  { date:"2025-12", netWorth:1640000, totalA:4970000, totalP:3330000, label:"12/25" },
-  { date:"2026-01", netWorth:1680000, totalA:5010000, totalP:3330000, label:"1/26" },
-];
-const DEFAULT_GOALS = [
-  { id:"g1", name:"První milion",       target:1000000,  colorClass:"g2" },
-  { id:"g2", name:"Finanční svoboda",   target:10000000, colorClass:""   },
-  { id:"g3", name:"Cestovní fond",      target:500000,   colorClass:"g3" },
-];
+const DEFAULT_CATS_A = ["Bankovní účet","Akcie","ETF","Krypto","Nemovitost","Automobil","Dluhopisy","Zlato / kovy","Hotovost","Jiné investice","Ostatní"];
+const DEFAULT_CATS_P = ["Hypotéka","Spotřební půjčka","Kreditní karta","Leasing","Studentská půjčka","Jiný dluh","Ostatní"];
 
-const LS_KEY = "wealthos_v2";
+const LS_KEY = "wealthos_v4";
 
 function loadLS() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+  try { const r = localStorage.getItem(LS_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
 }
 function saveLS(data) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {}
 }
 
-// ── Hook ──────────────────────────────────────────────────────
-export function useData() {
-  const [aktiva,  setAktivaRaw]  = useState([]);
-  const [pasiva,  setPasivaRaw]  = useState([]);
-  const [history, setHistory]    = useState([]);
-  const [goals,   setGoalsRaw]   = useState([]);
-  const [loading, setLoading]    = useState(true);
-  const [syncing, setSyncing]    = useState(false);
-  const [toast,   setToast]      = useState(null);   // { msg, type }
-  const [sheetsOk, setSheetsOk]  = useState(false);
+// Zajistí, že každá položka má history pole
+function ensureHistory(items) {
+  return items.map(item => {
+    if (!item.history) {
+      return { ...item, history: item.date && item.value ? [{ date: item.date, value: Number(item.value) }] : [] };
+    }
+    return item;
+  });
+}
 
-  // ── Toast helper ──────────────────────────────────────────
+// Přidá nebo aktualizuje záznam v historii položky
+function upsertHistory(item, date, value) {
+  const history = item.history || [];
+  const exists = history.find(h => h.date === date);
+  const newHistory = exists
+    ? history.map(h => h.date === date ? { date, value: Number(value) } : h)
+    : [...history, { date, value: Number(value) }];
+  // Seřadit chronologicky
+  return newHistory.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function useData() {
+  const [aktiva,   setAktiva]   = useState([]);
+  const [pasiva,   setPasiva]   = useState([]);
+  const [goals,    setGoals]    = useState([]);
+  const [catsA,    setCatsA]    = useState(DEFAULT_CATS_A);
+  const [catsP,    setCatsP]    = useState(DEFAULT_CATS_P);
+  const [loading,  setLoading]  = useState(true);
+  const [syncing,  setSyncing]  = useState(false);
+  const [toast,    setToast]    = useState(null);
+  const [sheetsOk, setSheetsOk] = useState(false);
+
   const showToast = useCallback((msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // ── Init: zkus Sheets, pak localStorage, pak defaults ─────
+  // ── Init ──────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
         const data = await loadAll();
         if (data && (data.aktiva?.length || data.pasiva?.length)) {
-          setAktivaRaw(data.aktiva  || DEFAULT_AKTIVA);
-          setPasivaRaw(data.pasiva  || DEFAULT_PASIVA);
-          setHistory(data.history || DEFAULT_HISTORY);
-          setGoalsRaw(data.goals  || DEFAULT_GOALS);
+          setAktiva(ensureHistory(data.aktiva || []));
+          setPasiva(ensureHistory(data.pasiva || []));
+          setGoals(data.goals || []);
           setSheetsOk(true);
-        } else {
-          throw new Error("prázdná data");
-        }
+        } else throw new Error("prázdná");
       } catch {
-        // fallback na localStorage
         const ls = loadLS();
         if (ls) {
-          setAktivaRaw(ls.aktiva  || DEFAULT_AKTIVA);
-          setPasivaRaw(ls.pasiva  || DEFAULT_PASIVA);
-          setHistory(ls.history   || DEFAULT_HISTORY);
-          setGoalsRaw(ls.goals    || DEFAULT_GOALS);
-        } else {
-          setAktivaRaw(DEFAULT_AKTIVA);
-          setPasivaRaw(DEFAULT_PASIVA);
-          setHistory(DEFAULT_HISTORY);
-          setGoalsRaw(DEFAULT_GOALS);
+          setAktiva(ensureHistory(ls.aktiva || []));
+          setPasiva(ensureHistory(ls.pasiva || []));
+          setGoals(ls.goals || []);
+          setCatsA(ls.catsA || DEFAULT_CATS_A);
+          setCatsP(ls.catsP || DEFAULT_CATS_P);
         }
-      } finally {
-        setLoading(false);
-      }
+      } finally { setLoading(false); }
     })();
   }, []);
 
-  // ── Ulož do localStorage při každé změně ──────────────────
   useEffect(() => {
-    if (!loading) {
-      saveLS({ aktiva, pasiva, history, goals });
-    }
-  }, [aktiva, pasiva, history, goals, loading]);
+    if (!loading) saveLS({ aktiva, pasiva, goals, catsA, catsP });
+  }, [aktiva, pasiva, goals, catsA, catsP, loading]);
 
-  // ── Wrapped settery se Sheets sync ───────────────────────
-
-  const syncAction = useCallback(async (apiCall, localUpdate, successMsg) => {
-    localUpdate(); // okamžitá lokální změna (optimistic update)
+  // ── Sync helper ───────────────────────────────────────────
+  const sync = useCallback(async (apiCall, localFn, msg) => {
+    localFn();
     if (!sheetsOk) return;
     setSyncing(true);
-    try {
-      await apiCall();
-      showToast(successMsg);
-    } catch (e) {
-      showToast("Sheets: " + e.message, "error");
-    } finally {
-      setSyncing(false);
-    }
+    try { await apiCall(); showToast(msg); }
+    catch (e) { showToast("Sheets: " + e.message, "error"); }
+    finally { setSyncing(false); }
   }, [sheetsOk, showToast]);
 
   // ── AKTIVA ─────────────────────────────────────────────────
-
   const addAktivum = useCallback((item) => {
-    syncAction(
-      () => addItem("a", item),
-      () => setAktivaRaw(prev => [...prev, item]),
-      "Aktivum přidáno"
-    );
-  }, [syncAction]);
+    const withHistory = { ...item, history: [{ date: item.date, value: Number(item.value) }] };
+    sync(() => addItem("a", withHistory), () => setAktiva(p => [...p, withHistory]), "Aktivum přidáno");
+  }, [sync]);
 
   const updateAktivum = useCallback((item) => {
-    syncAction(
-      () => updateItem("a", item),
-      () => setAktivaRaw(prev => prev.map(x => x.id === item.id ? item : x)),
-      "Aktivum aktualizováno"
-    );
-  }, [syncAction]);
+    // Aktualizuje hodnotu + přidá/updatuje záznam v historii
+    const newHistory = upsertHistory(item, item.date, item.value);
+    const updated = { ...item, history: newHistory };
+    sync(() => updateItem("a", updated), () => setAktiva(p => p.map(x => x.id === item.id ? updated : x)), "Aktivum aktualizováno");
+  }, [sync]);
 
-  const deleteAktivum = useCallback((id) => {
-    syncAction(
-      () => deleteItem("a", id),
-      () => setAktivaRaw(prev => prev.filter(x => x.id !== id)),
-      "Aktivum smazáno"
-    );
-  }, [syncAction]);
-
-  // ── PASIVA ─────────────────────────────────────────────────
-
-  const addPasivum = useCallback((item) => {
-    syncAction(
-      () => addItem("p", item),
-      () => setPasivaRaw(prev => [...prev, item]),
-      "Pasivum přidáno"
-    );
-  }, [syncAction]);
-
-  const updatePasivum = useCallback((item) => {
-    syncAction(
-      () => updateItem("p", item),
-      () => setPasivaRaw(prev => prev.map(x => x.id === item.id ? item : x)),
-      "Pasivum aktualizováno"
-    );
-  }, [syncAction]);
-
-  const deletePasivum = useCallback((id) => {
-    syncAction(
-      () => deleteItem("p", id),
-      () => setPasivaRaw(prev => prev.filter(x => x.id !== id)),
-      "Pasivum smazáno"
-    );
-  }, [syncAction]);
-
-  // ── SNAPSHOT ───────────────────────────────────────────────
-
-  const saveSnapshot = useCallback((totalA, totalP) => {
-    const ym  = todayYM();
-    const [y, m] = ym.split("-");
-    const label = `${parseInt(m)}/${y.slice(2)}`;
-    const snapshot = {
-      date:     ym,
-      netWorth: totalA - totalP,
-      totalA,
-      totalP,
-      label,
-    };
-    // Přidej jen pokud ještě neexistuje stejný měsíc
-    if (history.some(h => h.date === ym)) {
-      showToast("Snapshot pro tento měsíc již existuje", "error");
-      return;
-    }
-    syncAction(
-      () => addSnapshot(snapshot),
-      () => setHistory(prev => [...prev, snapshot]),
-      "Snapshot uložen"
-    );
-  }, [history, syncAction, showToast]);
-
-  // ── GOALS ──────────────────────────────────────────────────
-
-  const updateGoals = useCallback((newGoals) => {
-    syncAction(
-      () => saveGoals(newGoals),
-      () => setGoalsRaw(newGoals),
-      "Cíle uloženy"
-    );
-  }, [syncAction]);
-
-  // ── Export / Import ────────────────────────────────────────
-
-  const exportData = useCallback(() => {
-    const data = { aktiva, pasiva, history, goals };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "wealthos-backup.json";
-    a.click();
-    showToast("Data exportována");
-  }, [aktiva, pasiva, history, goals, showToast]);
-
-  const importData = useCallback((file) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const d = JSON.parse(ev.target.result);
-        if (d.aktiva)  setAktivaRaw(d.aktiva);
-        if (d.pasiva)  setPasivaRaw(d.pasiva);
-        if (d.history) setHistory(d.history);
-        if (d.goals)   setGoalsRaw(d.goals);
-        showToast("Data importována");
-      } catch {
-        showToast("Chyba při importu souboru", "error");
-      }
-    };
-    reader.readAsText(file);
+  // Editace záznamu přímo v historii (jen date + value záznamu)
+  const updateAktivumHistory = useCallback((itemId, oldDate, newDate, newValue) => {
+    setAktiva(p => p.map(item => {
+      if (item.id !== itemId) return item;
+      const history = (item.history || [])
+        .filter(h => h.date !== oldDate)
+        .concat({ date: newDate, value: Number(newValue) })
+        .sort((a, b) => a.date.localeCompare(b.date));
+      // Aktualizuj i current value pokud jde o nejnovější záznam
+      const latest = history[history.length - 1];
+      return { ...item, history, value: latest.value, date: latest.date };
+    }));
+    showToast("Záznam aktualizován");
   }, [showToast]);
 
-  // ── Computed values ────────────────────────────────────────
-  const totalA  = aktiva.reduce((s, i) => s + Number(i.value), 0);
-  const totalP  = pasiva.reduce((s, i) => s + Number(i.value), 0);
+  const deleteAktivumHistory = useCallback((itemId, date) => {
+    setAktiva(p => p.map(item => {
+      if (item.id !== itemId) return item;
+      const history = (item.history || []).filter(h => h.date !== date);
+      const latest = history[history.length - 1];
+      return { ...item, history, value: latest?.value || item.value, date: latest?.date || item.date };
+    }));
+    showToast("Záznam smazán");
+  }, [showToast]);
+
+  const deleteAktivum = useCallback((id) => {
+    sync(() => deleteItem("a", id), () => setAktiva(p => p.filter(x => x.id !== id)), "Aktivum smazáno");
+  }, [sync]);
+
+  // ── PASIVA ─────────────────────────────────────────────────
+  const addPasivum = useCallback((item) => {
+    const withHistory = { ...item, history: [{ date: item.date, value: Number(item.value) }] };
+    sync(() => addItem("p", withHistory), () => setPasiva(p => [...p, withHistory]), "Pasivum přidáno");
+  }, [sync]);
+
+  const updatePasivum = useCallback((item) => {
+    const newHistory = upsertHistory(item, item.date, item.value);
+    const updated = { ...item, history: newHistory };
+    sync(() => updateItem("p", updated), () => setPasiva(p => p.map(x => x.id === item.id ? updated : x)), "Pasivum aktualizováno");
+  }, [sync]);
+
+  const updatePasivumHistory = useCallback((itemId, oldDate, newDate, newValue) => {
+    setPasiva(p => p.map(item => {
+      if (item.id !== itemId) return item;
+      const history = (item.history || [])
+        .filter(h => h.date !== oldDate)
+        .concat({ date: newDate, value: Number(newValue) })
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const latest = history[history.length - 1];
+      return { ...item, history, value: latest.value, date: latest.date };
+    }));
+    showToast("Záznam aktualizován");
+  }, [showToast]);
+
+  const deletePasivumHistory = useCallback((itemId, date) => {
+    setPasiva(p => p.map(item => {
+      if (item.id !== itemId) return item;
+      const history = (item.history || []).filter(h => h.date !== date);
+      const latest = history[history.length - 1];
+      return { ...item, history, value: latest?.value || item.value, date: latest?.date || item.date };
+    }));
+    showToast("Záznam smazán");
+  }, [showToast]);
+
+  const deletePasivum = useCallback((id) => {
+    sync(() => deleteItem("p", id), () => setPasiva(p => p.filter(x => x.id !== id)), "Pasivum smazáno");
+  }, [sync]);
+
+  // ── GOALS ──────────────────────────────────────────────────
+  const updateGoals = useCallback((newGoals) => {
+    sync(() => saveGoals(newGoals), () => setGoals(newGoals), "Cíle uloženy");
+  }, [sync]);
+
+  // ── KATEGORIE ─────────────────────────────────────────────
+  const addCat    = useCallback((type, name) => { if (type==="a") setCatsA(p=>[...p,name]); else setCatsP(p=>[...p,name]); }, []);
+  const deleteCat = useCallback((type, name) => { if (type==="a") setCatsA(p=>p.filter(c=>c!==name)); else setCatsP(p=>p.filter(c=>c!==name)); }, []);
+
+  // ── EXPORT / IMPORT ────────────────────────────────────────
+  const exportData = useCallback(() => {
+    const blob = new Blob([JSON.stringify({ aktiva, pasiva, goals, catsA, catsP }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "wealthos-backup.json"; a.click();
+    showToast("Data exportována");
+  }, [aktiva, pasiva, goals, catsA, catsP, showToast]);
+
+  const importData = useCallback((file) => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (d.aktiva)  setAktiva(ensureHistory(d.aktiva));
+        if (d.pasiva)  setPasiva(ensureHistory(d.pasiva));
+        if (d.goals)   setGoals(d.goals);
+        if (d.catsA)   setCatsA(d.catsA);
+        if (d.catsP)   setCatsP(d.catsP);
+        showToast("Data importována");
+      } catch { showToast("Chyba při importu", "error"); }
+    };
+    r.readAsText(file);
+  }, [showToast]);
+
+  // ── Computed ──────────────────────────────────────────────
+  const totalA   = aktiva.reduce((s, i) => s + Number(i.value), 0);
+  const totalP   = pasiva.reduce((s, i) => s + Number(i.value), 0);
   const netWorth = totalA - totalP;
 
-  const prevNW  = history.length > 0 ? history[history.length - 1].netWorth : netWorth;
+  // Zjisti předchozí čisté jmění (předposlední měsíc v historii)
+  const allDates = [...new Set([
+    ...aktiva.flatMap(i => (i.history||[]).map(h => h.date)),
+    ...pasiva.flatMap(i => (i.history||[]).map(h => h.date)),
+  ])].sort();
+  const prevMonth = allDates.length >= 2 ? allDates[allDates.length - 2] : null;
+  const prevNW = prevMonth
+    ? aktiva.reduce((s,i) => { const h=(i.history||[]).find(x=>x.date===prevMonth); return s+(h?h.value:0); }, 0)
+    - pasiva.reduce((s,i) => { const h=(i.history||[]).find(x=>x.date===prevMonth); return s+(h?h.value:0); }, 0)
+    : netWorth;
   const diff    = netWorth - prevNW;
   const diffPct = prevNW !== 0 ? ((diff / prevNW) * 100).toFixed(1) : "0.0";
 
+  // Všechny dostupné měsíce v historii (pro History stránku)
+  const availableMonths = [...new Set([
+    ...aktiva.flatMap(i => (i.history||[]).map(h => h.date)),
+    ...pasiva.flatMap(i => (i.history||[]).map(h => h.date)),
+  ])].sort().reverse(); // nejnovější první
+
   return {
-    // state
-    aktiva, pasiva, history, goals,
+    aktiva, pasiva, goals, catsA, catsP,
     loading, syncing, toast, sheetsOk,
-    // computed
-    totalA, totalP, netWorth, diff, diffPct, prevNW,
-    // actions — aktiva
+    totalA, totalP, netWorth, diff, diffPct,
+    availableMonths,
     addAktivum, updateAktivum, deleteAktivum,
-    // actions — pasiva
+    updateAktivumHistory, deleteAktivumHistory,
     addPasivum, updatePasivum, deletePasivum,
-    // actions — other
-    saveSnapshot, updateGoals,
-    // import/export
+    updatePasivumHistory, deletePasivumHistory,
+    updateGoals,
+    addCat, deleteCat,
     exportData, importData,
   };
 }
