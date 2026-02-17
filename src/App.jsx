@@ -12,6 +12,7 @@ import { fmtKc } from "./utils/format";
 export default function App() {
   const [dark,      setDark]      = useState(true);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [diagOpen,  setDiagOpen]  = useState(false);
   const [page,      setPage]      = useState("dashboard"); // dashboard | history
 
   const {
@@ -45,6 +46,7 @@ export default function App() {
         dark={dark} onToggleDark={() => setDark(d => !d)}
         onExport={exportData} onImport={importData}
         onOpenAdmin={() => setAdminOpen(true)}
+        onOpenDiagnostics={() => setDiagOpen(true)}
         syncing={syncing} sheetsOk={sheetsOk}
         page={page} onChangePage={setPage}
       />
@@ -82,8 +84,9 @@ export default function App() {
         <AdminPanel catsA={catsA} catsP={catsP} onAdd={addCat} onDelete={deleteCat} onClose={() => setAdminOpen(false)} />
       )}
 
+      {diagOpen && <Diagnostics onClose={() => setDiagOpen(false)} />}
+
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
-      <Diagnostics />
     </div>
   );
 }

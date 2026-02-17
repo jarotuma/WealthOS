@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 
-export default function NavBar({ dark, onToggleDark, onExport, onImport, onOpenAdmin, syncing, sheetsOk, page, onChangePage }) {
+export default function NavBar({ dark, onToggleDark, onExport, onImport, onOpenAdmin, onOpenDiagnostics, syncing, sheetsOk, page, onChangePage }) {
   const fileRef = useRef();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -9,6 +9,13 @@ export default function NavBar({ dark, onToggleDark, onExport, onImport, onOpenA
     { label: "Export dat",       icon: "⬇️", action: onExport },
     { label: "Import dat",       icon: "⬆️", action: () => fileRef.current?.click() },
     { label: "Správa kategorií", icon: "⚙️", action: onOpenAdmin },
+    { label: "Diagnostika",      icon: "🔬", action: onOpenDiagnostics },
+    { label: "Vymazat lokální data", icon: "🗑️", action: () => { 
+      if (window.confirm("Smazat všechna lokální data? (Sheets zůstanou nedotčeny)")) {
+        localStorage.clear(); 
+        window.location.reload();
+      }
+    }},
   ];
 
   return (
