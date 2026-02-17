@@ -1,79 +1,53 @@
 // ─────────────────────────────────────────────────────────────
-//  sheets.js  —  komunikace s Google Apps Script endpointem
-//
-//  Nastav svou URL po nasazení Apps Scriptu:
-//  Apps Script → Deploy → Manage deployments → zkopíruj Web app URL
+//  sheets.js — vše přes GET parametry (Apps Script redirect fix)
+//  POST → GET redirect je známý Apps Script bug, proto GET everywhere
 // ─────────────────────────────────────────────────────────────
 
 const SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || "";
 
-// ── Základní fetch helper ─────────────────────────────────────
-async function apiFetch(body) {
-  if (!SCRIPT_URL) {
-    throw new Error(
-      "Chybí VITE_APPS_SCRIPT_URL. Přidej ho do souboru .env"
-    );
-  }
+async function apiFetch(params) {
+  if (!SCRIPT_URL) throw new Error("Chybí VITE_APPS_SCRIPT_URL");
 
-  const res = await fetch(SCRIPT_URL, {
-    method:  "POST",
-    headers: { "Content-Type": "text/plain" }, // Apps Script vyžaduje text/plain (ne application/json) kvůli CORS pre-flightu
-    body:    JSON.stringify(body),
+  // Serializuj data jako URL parametr — obejde POST→GET redirect problém
+  const url = SCRIPT_URL + "?payload=" + encodeURIComponent(JSON.stringify(params));
+
+  const res = await fetch(url, {
+    method: "GET",
     redirect: "follow",
   });
 
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
 
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || "Neznámá chyba serveru");
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); }
+  catch { throw new Error("Neplatná odpověď ze serveru: " + text.slice(0, 100)); }
+
+  if (!json.ok) throw new Error(json.error || "Neznámá chyba");
   return json;
 }
 
-// ── GET — načti všechna data ──────────────────────────────────
-export async function fetchAll() {
-  if (!SCRIPT_URL) return null; // tichý návrat pro dev bez URL
-  const json = await apiFetch({ action: "fetchAll" });
-  return json.data; // { aktiva, pasiva, history, goals }
+export async function loadAll() {
+  if (!SCRIPT_URL) return null;
+  return apiFetch({ action: "fetchAll" }).then(r => r.data);
 }
 
-// ── Přidej položku ────────────────────────────────────────────
 export async function addItem(type, item) {
   return apiFetch({ action: "addItem", type, item });
 }
 
-// ── Aktualizuj položku ────────────────────────────────────────
 export async function updateItem(type, item) {
   return apiFetch({ action: "updateItem", type, item });
 }
 
-// ── Smaž položku ──────────────────────────────────────────────
 export async function deleteItem(type, id) {
   return apiFetch({ action: "deleteItem", type, id });
 }
 
-// ── Přidej snapshot do historie ───────────────────────────────
-export async function addSnapshot(snapshot) {
-  return apiFetch({ action: "addSnapshot", snapshot });
-}
-
-// ── Ulož cíle ─────────────────────────────────────────────────
 export async function saveGoals(goals) {
   return apiFetch({ action: "saveGoals", goals });
 }
 
-// ── Ulož vše najednou (bulk) ──────────────────────────────────
 export async function saveAll(data) {
   return apiFetch({ action: "saveAll", ...data });
-}
-
-// ── GET pro Apps Script (musí být GET, ne POST) ───────────────
-export async function loadAll() {
-  if (!SCRIPT_URL) return null;
-  const res = await fetch(SCRIPT_URL, { redirect: "follow" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
-  if (!json.ok) throw new Error(json.error || "Chyba načítání");
-  return json.data;
 }
