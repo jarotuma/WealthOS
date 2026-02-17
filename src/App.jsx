@@ -6,6 +6,7 @@ import AssetList from "./components/AssetList";
 import { HistoryChart, PieCharts, GoalsSection } from "./components/Charts";
 import AdminPanel from "./components/AdminPanel";
 import HistoryPage from "./components/HistoryPage";
+import Diagnostics from "./components/Diagnostics";
 import { fmtKc } from "./utils/format";
 
 export default function App() {
@@ -82,6 +83,7 @@ export default function App() {
       )}
 
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
+      <Diagnostics />
     </div>
   );
 }
