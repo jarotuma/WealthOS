@@ -20,6 +20,7 @@ export default function App() {
     loading, syncing, toast, sheetsOk,
     totalA, totalP, netWorth, diff, diffPct,
     availableMonths,
+    historyData,
     addAktivum, updateAktivum, deleteAktivum,
     updateAktivumHistory, deleteAktivumHistory,
     addPasivum, updatePasivum, deletePasivum,
@@ -70,7 +71,7 @@ export default function App() {
           <AssetList type="p" items={pasiva} cats={catsP} onAdd={addPasivum} onUpdate={updatePasivum} onDelete={deletePasivum} />
 
           <div className="section-label">Historie čistého jmění</div>
-          <HistoryChart history={[]} dark={dark} onSnapshot={() => {}} totalA={totalA} totalP={totalP} />
+          <HistoryChart aktiva={aktiva} pasiva={pasiva} availableMonths={availableMonths} />
 
           <div className="section-label">Rozložení portfolia <small>Asset Allocation</small></div>
           <PieCharts aktiva={aktiva} pasiva={pasiva} />

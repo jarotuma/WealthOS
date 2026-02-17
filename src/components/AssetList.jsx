@@ -13,10 +13,26 @@ export const ALL_ICONS_P = [
 
 // ── Edit panel ────────────────────────────────────────────────
 function EditPanel({ item, type, onSave, onCancel }) {
-  const { year, month } = splitYM(item.date);
+  // Najdi nejnovější měsíc v historii a nastav default na další měsíc
+  const latestDate = item.history && item.history.length > 0
+    ? [...item.history].sort((a, b) => b.date.localeCompare(a.date))[0].date
+    : item.date;
+  
+  // Vypočítej následující měsíc
+  const [latestYear, latestMonth] = latestDate.split("-");
+  let nextYear = parseInt(latestYear);
+  let nextMonth = parseInt(latestMonth) + 1;
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear++;
+  }
+  
+  const defaultMonth = String(nextMonth).padStart(2, "0");
+  const defaultYear = String(nextYear);
+
   const [value,   setValue]  = useState(String(item.value));
-  const [selM,    setSelM]   = useState(month);
-  const [selY,    setSelY]   = useState(year);
+  const [selM,    setSelM]   = useState(defaultMonth);
+  const [selY,    setSelY]   = useState(defaultYear);
 
   return (
     <div style={{
@@ -27,7 +43,7 @@ function EditPanel({ item, type, onSave, onCancel }) {
       <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600, whiteSpace: "nowrap" }}>Nová hodnota (Kč):</label>
       <input className="inp mono" type="number" value={value} onChange={e => setValue(e.target.value)}
         style={{ maxWidth: 150 }} autoFocus />
-      <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600, whiteSpace: "nowrap" }}>Aktualizace:</label>
+      <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600, whiteSpace: "nowrap" }}>Měsíc aktualizace:</label>
       <select className="inp" value={selM} onChange={e => setSelM(e.target.value)} style={{ maxWidth: 82 }}>
         {MONTHS.map((m, i) => <option key={i} value={String(i+1).padStart(2,"0")}>{m}</option>)}
       </select>

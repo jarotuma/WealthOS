@@ -332,11 +332,30 @@ export function useData() {
     ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
   ])].sort().reverse();
 
+  // Historie pro graf - pro každý měsíc spočítej totalA, totalP, netWorth
+  const historyData = availableMonths.map(date => {
+    const monthTotalA = aktiva.reduce((sum, item) => {
+      const h = (item.history || []).find(x => x.date === date);
+      return sum + (h ? h.value : 0);
+    }, 0);
+    const monthTotalP = pasiva.reduce((sum, item) => {
+      const h = (item.history || []).find(x => x.date === date);
+      return sum + (h ? h.value : 0);
+    }, 0);
+    return {
+      date,
+      totalA: monthTotalA,
+      totalP: monthTotalP,
+      netWorth: monthTotalA - monthTotalP,
+    };
+  }).reverse(); // reverse aby byl chronologický (nejstarší první)
+
   return {
     aktiva, pasiva, goals, catsA, catsP,
     loading, syncing, toast, sheetsOk,
     totalA, totalP, netWorth, diff, diffPct,
     availableMonths,
+    historyData,
     addAktivum, updateAktivum, deleteAktivum,
     updateAktivumHistory, deleteAktivumHistory,
     addPasivum, updatePasivum, deletePasivum,
