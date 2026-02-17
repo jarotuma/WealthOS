@@ -149,8 +149,15 @@ export function useData() {
   }, [sync]);
 
   const updateAktivum = useCallback((item) => {
+    console.log("🔄 updateAktivum called with:", item);
+    console.log("  Current history:", item.history);
+    
     const newHistory = upsertHistory(item, item.date, item.value);
+    console.log("  New history after upsert:", newHistory);
+    
     const updated = { ...item, history: newHistory };
+    console.log("  Final updated object:", updated);
+    
     sync(
       () => updateItem("a", updated),
       () => setAktiva(p => p.map(x => x.id === item.id ? updated : x)),
