@@ -23,13 +23,23 @@ export function fmtShort(n) {
   return num.toLocaleString("cs-CZ");
 }
 
-/** "2026-02"  →  "úno 2026" */
+/** "2026-02" nebo Date objekt  →  "úno 2026" */
 export function fmtDate(d) {
   if (!d) return "—";
-  const [y, m] = String(d).split("-");
-  const idx = parseInt(m, 10) - 1;
-  if (idx < 0 || idx > 11) return d;
-  return `${MONTHS[idx]} ${y}`;
+  // Pokud je to Date objekt (Google Sheets ho vrací místo stringu)
+  if (d instanceof Date) {
+    const y = d.getFullYear();
+    const m = d.getMonth(); // 0-indexed
+    return `${MONTHS[m]} ${y}`;
+  }
+  const s = String(d);
+  // Formát "YYYY-MM"
+  if (/^\d{4}-\d{2}/.test(s)) {
+    const [y, m] = s.split("-");
+    const idx = parseInt(m, 10) - 1;
+    if (idx >= 0 && idx <= 11) return `${MONTHS[idx]} ${y}`;
+  }
+  return s;
 }
 
 /** Dnešní datum jako "YYYY-MM" */
