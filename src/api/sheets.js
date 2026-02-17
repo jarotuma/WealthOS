@@ -37,7 +37,11 @@ export async function addItem(type, item) {
 }
 
 export async function updateItem(type, item) {
-  return apiFetch({ action: "updateItem", type, item });
+  console.log("📤 API updateItem called:", { type, item });
+  console.log("  item.history:", item.history);
+  const result = await apiFetch({ action: "updateItem", type, item });
+  console.log("📥 API updateItem response:", result);
+  return result;
 }
 
 export async function deleteItem(type, id) {
