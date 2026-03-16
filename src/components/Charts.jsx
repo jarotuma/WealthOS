@@ -3,6 +3,24 @@ import { fmtKc } from "../utils/format";
 
 // ── History Chart ─────────────────────────────────────────────
 export function HistoryChart({ aktiva, pasiva, availableMonths }) {
+  // Zjisti aktuální a minulý rok
+  const currentYear = new Date().getFullYear().toString();
+  const lastYear = (new Date().getFullYear() - 1).toString();
+  
+  // Zjisti které roky máme v datech
+  const yearsInData = availableMonths 
+    ? [...new Set(availableMonths.map(ym => ym.split("-")[0]))]
+    : [];
+  
+  // Default: aktuální rok pokud existuje, jinak minulý, jinak all
+  const getDefaultFilter = () => {
+    if (yearsInData.includes(currentYear)) return "currentYear";
+    if (yearsInData.includes(lastYear)) return "lastYear";
+    return "all";
+  };
+  
+  const [filter, setFilter] = useState(getDefaultFilter());
+  
   if (!availableMonths || availableMonths.length === 0) {
     return (
       <div className="card">
@@ -27,26 +45,101 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
 
   // Spočítej čisté jmění pro každý měsíc z per-item history
   const months = [...availableMonths].reverse();
-  const points = months.map(ym => {
+  const allPoints = months.map(ym => {
     const tA = aktiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const tP = pasiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const [y, m] = ym.split("-");
-    return { ym, nw: tA - tP, label: `${parseInt(m)}/${y.slice(2)}` };
+    return { ym, nw: tA - tP, label: `${parseInt(m)}/${y.slice(2)}`, year: y };
   });
+  
+  // Filtruj podle výběru
+  const points = filter === "all" 
+    ? allPoints
+    : filter === "lastYear"
+    ? allPoints.filter(p => p.year === lastYear)
+    : allPoints.filter(p => p.year === currentYear);
+
+  if (points.length === 0) {
+    return (
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">Historie čistého jmění</span>
+        </div>
+        <div style={{ padding: "20px", color: "var(--text3)", fontSize: 13 }}>
+          Žádná data pro vybraný rok
+        </div>
+      </div>
+    );
+  }
 
   const maxNW = Math.max(...points.map(p => p.nw));
   const minNW = Math.min(...points.map(p => p.nw));
   const range = maxNW - minNW || 1;
+  
+  // Check which years have data
+  const hasCurrentYear = yearsInData.includes(currentYear);
+  const hasLastYear = yearsInData.includes(lastYear);
 
   return (
     <div className="card">
       <div className="card-header">
         <span className="card-title">Vývoj čistého jmění</span>
-        <span style={{ fontSize: 11, color: "var(--text3)", fontWeight: 600 }}>{points.length} měsíců</span>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button 
+            onClick={() => hasCurrentYear && setFilter("currentYear")}
+            disabled={!hasCurrentYear}
+            style={{
+              background: filter === "currentYear" ? "var(--blue)" : "var(--surface2)",
+              color: filter === "currentYear" ? "#fff" : hasCurrentYear ? "var(--text3)" : "var(--border)",
+              border: "none",
+              padding: "4px 10px",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: hasCurrentYear ? "pointer" : "not-allowed",
+              fontFamily: "inherit",
+              opacity: hasCurrentYear ? 1 : 0.5
+            }}>
+            Aktuální rok
+          </button>
+          <button 
+            onClick={() => hasLastYear && setFilter("lastYear")}
+            disabled={!hasLastYear}
+            style={{
+              background: filter === "lastYear" ? "var(--blue)" : "var(--surface2)",
+              color: filter === "lastYear" ? "#fff" : hasLastYear ? "var(--text3)" : "var(--border)",
+              border: "none",
+              padding: "4px 10px",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: hasLastYear ? "pointer" : "not-allowed",
+              fontFamily: "inherit",
+              opacity: hasLastYear ? 1 : 0.5
+            }}>
+            Minulý rok
+          </button>
+          <button 
+            onClick={() => setFilter("all")}
+            style={{
+              background: filter === "all" ? "var(--blue)" : "var(--surface2)",
+              color: filter === "all" ? "#fff" : "var(--text3)",
+              border: "none",
+              padding: "4px 10px",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit"
+            }}>
+            Vše
+          </button>
+        </div>
       </div>
       <div style={{ padding: "18px 18px 10px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <span className="mono" style={{ fontSize: 10, color: "var(--text3)" }}>{fmtKc(minNW)}</span>
+          <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>{points.length} měsíců</span>
           <span className="mono" style={{ fontSize: 10, color: "var(--text3)" }}>{fmtKc(maxNW)}</span>
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 130, paddingBottom: 22, position: "relative" }}>
@@ -92,11 +185,45 @@ function PieSVG({ data, size = 110, label }) {
 }
 
 export function PieCharts({ aktiva, pasiva }) {
+  // Barevná paleta pro aktiva (různé odstíny zelené/modré/žluté)
+  const AKTIVA_COLORS = [
+    "#34c759", // zelená
+    "#30d158", // světle zelená
+    "#32ade6", // modrá
+    "#64d2ff", // světle modrá
+    "#ffd60a", // žlutá
+    "#ff9f0a", // oranžová
+    "#bf5af2", // fialová
+    "#ac8e68", // zlatá
+    "#5e5ce6", // indigo
+    "#00c7be", // tyrkysová
+  ];
+
+  // Barevná paleta pro pasiva (různé odstíny červené/oranžové)
+  const PASIVA_COLORS = [
+    "#ff3b30", // červená
+    "#ff453a", // světle červená
+    "#ff6961", // lososová
+    "#ff9500", // oranžová
+    "#ffb340", // světle oranžová
+    "#ff2d55", // růžová
+    "#d13838", // tmavě červená
+  ];
+
   const totalA = aktiva.reduce((s, i) => s + Number(i.value), 0);
   const totalP = pasiva.reduce((s, i) => s + Number(i.value), 0);
-  const toPie  = (items, total) =>
-    items.map(i => ({ label: i.name, pct: total > 0 ? Math.round((Number(i.value)/total)*100) : 0, color: i.color||"#888" }))
-         .filter(d => d.pct > 0);
+  
+  const toPie = (items, total, colors) => {
+    // Seřaď položky podle hodnoty (od největší po nejmenší)
+    const sorted = [...items].sort((a, b) => Number(b.value) - Number(a.value));
+    
+    return sorted.map((i, idx) => ({ 
+      label: i.name, 
+      pct: total > 0 ? Math.round((Number(i.value)/total)*100) : 0, 
+      color: colors[idx % colors.length] // Barva podle pozice v seřazeném seznamu
+    }))
+    .filter(d => d.pct > 0);
+  };
 
   const renderSection = (title, total, data) => (
     <div style={{ padding: 18, flex: 1 }}>
@@ -132,9 +259,9 @@ export function PieCharts({ aktiva, pasiva }) {
         <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text3)" }}>Asset Allocation</span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr" }}>
-        {renderSection("Aktiva", totalA, toPie(aktiva, totalA))}
+        {renderSection("Aktiva", totalA, toPie(aktiva, totalA, AKTIVA_COLORS))}
         <div style={{ borderTop: "1px solid var(--border)" }}>
-          {renderSection("Pasiva", totalP, toPie(pasiva, totalP))}
+          {renderSection("Pasiva", totalP, toPie(pasiva, totalP, PASIVA_COLORS))}
         </div>
       </div>
     </div>

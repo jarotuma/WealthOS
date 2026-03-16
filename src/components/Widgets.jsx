@@ -16,10 +16,7 @@ export function HeroSection({ netWorth, diff, diffPct }) {
       </div>
       <div style={{ fontSize: "clamp(52px,10vw,80px)", fontWeight: 800, letterSpacing: -2, lineHeight: 1, marginBottom: 12 }}>
         <span style={{ fontSize: "0.45em", fontWeight: 600, verticalAlign: "super", marginRight: 4, color: "var(--text2)" }}>Kč</span>
-        {fmtShort(netWorth)}
-        {Math.abs(netWorth) >= 1_000_000 && (
-          <span style={{ fontSize: "0.38em", fontWeight: 600, marginLeft: 6, color: "var(--text2)" }}>M</span>
-        )}
+        {Number(netWorth).toLocaleString("cs-CZ")}
       </div>
       {diff !== 0 && (
         <div style={{
