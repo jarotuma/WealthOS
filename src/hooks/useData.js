@@ -293,26 +293,149 @@ export function useData() {
 
   // ── EXPORT / IMPORT ────────────────────────────────────────
   const exportData = useCallback(() => {
-    const blob = new Blob([JSON.stringify({ aktiva, pasiva, goals, catsA, catsP }, null, 2)], { type: "application/json" });
+    // CSV formát: type,id,icon,name,cat,value,color,date,history
+    const header = "type,id,icon,name,cat,value,color,date,history";
+    
+    const aktivaRows = aktiva.map(item => {
+      const historyJson = JSON.stringify(item.history || []).replace(/"/g, '""'); // Escape quotes
+      return `a,"${item.id}","${item.icon}","${item.name}","${item.cat}",${item.value},"${item.color}","${item.date}","${historyJson}"`;
+    });
+    
+    const pasivaRows = pasiva.map(item => {
+      const historyJson = JSON.stringify(item.history || []).replace(/"/g, '""');
+      return `p,"${item.id}","${item.icon}","${item.name}","${item.cat}",${item.value},"${item.color}","${item.date}","${historyJson}"`;
+    });
+    
+    // Goals jako separate řádky s type="goal"
+    const goalRows = goals.map(g => 
+      `goal,"${g.id}","","${g.name}","",${g.target},"${g.colorClass}","",""`
+    );
+    
+    // Kategorie jako separate řádky
+    const catARows = catsA.map(c => `cat_a,"${c}","","","",0,"","",""`);
+    const catPRows = catsP.map(c => `cat_p,"${c}","","","",0,"","",""`);
+    
+    const csv = [header, ...aktivaRows, ...pasivaRows, ...goalRows, ...catARows, ...catPRows].join("\n");
+    
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `wealthos-backup-${todayYM()}.json`;
+    a.download = `wealthos-backup-${todayYM()}.csv`;
     a.click();
-    showToast("Data exportována ✓");
+    showToast("Data exportována do CSV ✓");
   }, [aktiva, pasiva, goals, catsA, catsP, showToast]);
 
   const importData = useCallback((file) => {
     const r = new FileReader();
-    r.onload = ev => {
+    r.onload = async (ev) => {
       try {
-        const d = JSON.parse(ev.target.result);
-        if (d.aktiva)  setAktiva(ensureHistory(d.aktiva));
-        if (d.pasiva)  setPasiva(ensureHistory(d.pasiva));
-        if (d.goals)   setGoals(d.goals);
-        if (d.catsA)   setCatsA(d.catsA);
-        if (d.catsP)   setCatsP(d.catsP);
-        showToast("Data importována ✓");
-      } catch { showToast("Chyba při importu", "error"); }
+        const content = ev.target.result;
+        let imported = { aktiva: [], pasiva: [], goals: [], catsA: [], catsP: [] };
+        
+        // Detekuj formát podle obsahu
+        if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+          // JSON formát
+          const d = JSON.parse(content);
+          imported = {
+            aktiva: ensureHistory(d.aktiva || []),
+            pasiva: ensureHistory(d.pasiva || []),
+            goals: d.goals || [],
+            catsA: d.catsA || DEFAULT_CATS_A,
+            catsP: d.catsP || DEFAULT_CATS_P
+          };
+          showToast("Data importována z JSON ✓");
+        } else {
+          // CSV formát
+          const lines = content.split("\n").filter(l => l.trim());
+          
+          const newAktiva = [];
+          const newPasiva = [];
+          const newGoals = [];
+          const newCatsA = [];
+          const newCatsP = [];
+          
+          // Simple CSV parser that handles quoted fields
+          const parseCSVLine = (line) => {
+            const fields = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              const next = line[i + 1];
+              
+              if (char === '"' && !inQuotes) {
+                inQuotes = true;
+              } else if (char === '"' && inQuotes) {
+                if (next === '"') {
+                  current += '"';
+                  i++; // Skip next quote
+                } else {
+                  inQuotes = false;
+                }
+              } else if (char === ',' && !inQuotes) {
+                fields.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            fields.push(current); // Last field
+            return fields;
+          };
+          
+          for (let i = 1; i < lines.length; i++) {
+            const fields = parseCSVLine(lines[i]);
+            const [type, id, icon, name, cat, value, color, date, historyStr] = fields;
+            
+            if (type === "a") {
+              const history = historyStr ? JSON.parse(historyStr) : [];
+              newAktiva.push({ id, icon, name, cat, value: Number(value), color, date, history });
+            } else if (type === "p") {
+              const history = historyStr ? JSON.parse(historyStr) : [];
+              newPasiva.push({ id, icon, name, cat, value: Number(value), color, date, history });
+            } else if (type === "goal") {
+              newGoals.push({ id, name, target: Number(value), colorClass: color });
+            } else if (type === "cat_a") {
+              newCatsA.push(id);
+            } else if (type === "cat_p") {
+              newCatsP.push(id);
+            }
+          }
+          
+          imported = {
+            aktiva: ensureHistory(newAktiva),
+            pasiva: ensureHistory(newPasiva),
+            goals: newGoals,
+            catsA: newCatsA.length ? newCatsA : DEFAULT_CATS_A,
+            catsP: newCatsP.length ? newCatsP : DEFAULT_CATS_P
+          };
+          showToast(`Import: ${newAktiva.length} aktiv, ${newPasiva.length} pasiv ✓`);
+        }
+        
+        // Nastav state
+        setAktiva(imported.aktiva);
+        setPasiva(imported.pasiva);
+        setGoals(imported.goals);
+        setCatsA(imported.catsA);
+        setCatsP(imported.catsP);
+        
+        // Synchronizuj do Sheets pokud je připojeno
+        if (SCRIPT_URL) {
+          try {
+            console.log("🔄 Synchronizuji importovaná data do Sheets...");
+            await saveAll(imported);
+            setSheetsOk(true);
+            showToast("✅ Data synchronizována do Google Sheets");
+          } catch (err) {
+            console.error("Sheets sync error:", err);
+            showToast("⚠️ Import OK, ale Sheets sync selhal: " + err.message, "error");
+          }
+        }
+      } catch (err) {
+        console.error("Import error:", err);
+        showToast("Chyba při importu: " + err.message, "error");
+      }
     };
     r.readAsText(file);
   }, [showToast]);

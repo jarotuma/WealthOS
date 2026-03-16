@@ -142,7 +142,7 @@ export default function NavBar({ dark, onToggleDark, onExport, onImport, onOpenA
         </>
       )}
 
-      <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }}
+      <input ref={fileRef} type="file" accept=".csv,.json" style={{ display: "none" }}
         onChange={e => { if (e.target.files[0]) { onImport(e.target.files[0]); e.target.value = ""; } }}
       />
     </>
