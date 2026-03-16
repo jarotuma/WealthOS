@@ -148,10 +148,20 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
           <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>{points.length} měsíců</span>
           <span className="mono" style={{ fontSize: 10, color: "var(--text3)" }}>{fmtKc(maxNW)}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 130, paddingBottom: 22, position: "relative" }}>
-          {[0.33, 0.66].map((f, i) => (
-            <div key={i} style={{ position: "absolute", left: 0, right: 0, zIndex: 0, bottom: `${f * 108 + 22}px`, borderTop: "1px dashed var(--border)" }} />
-          ))}
+        {/* Scrollable wrapper for mobile */}
+        <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ 
+            display: "flex", 
+            alignItems: "flex-end", 
+            gap: 5, 
+            height: 130, 
+            paddingBottom: 22, 
+            position: "relative",
+            minWidth: points.length > 6 ? `${points.length * 40}px` : "100%" // Dynamic min-width
+          }}>
+            {[0.33, 0.66].map((f, i) => (
+              <div key={i} style={{ position: "absolute", left: 0, right: 0, zIndex: 0, bottom: `${f * 108 + 22}px`, borderTop: "1px dashed var(--border)" }} />
+            ))}
           {points.map((p, i) => {
             const barH   = 18 + ((p.nw - minNW) / range) * 88;
             const isLast = i === points.length - 1;
@@ -198,6 +208,7 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
               </div>
             );
           })}
+          </div>
         </div>
       </div>
     </div>
