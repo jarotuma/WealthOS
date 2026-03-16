@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { fmtKc } from "../utils/format";
 
 // ── History Chart ─────────────────────────────────────────────
@@ -20,6 +20,12 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
   };
   
   const [filter, setFilter] = useState(getDefaultFilter());
+  const [selectedMonth, setSelectedMonth] = useState(null); // Vybraný měsíc pro detail
+  
+  // Reset výběru při změně filtru
+  useEffect(() => {
+    setSelectedMonth(null);
+  }, [filter]);
   
   if (!availableMonths || availableMonths.length === 0) {
     return (
@@ -149,10 +155,46 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
           {points.map((p, i) => {
             const barH   = 18 + ((p.nw - minNW) / range) * 88;
             const isLast = i === points.length - 1;
+            const isSelected = selectedMonth === p.ym;
+            const isActive = isSelected || isLast;
+            
             return (
               <div key={p.ym} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1 }}>
-                <div title={fmtKc(p.nw)} style={{ width: "100%", height: barH, borderRadius: "5px 5px 0 0", background: isLast ? "var(--blue)" : "rgba(0,113,227,0.14)", cursor: "default" }} />
-                <span style={{ position: "absolute", bottom: -18, fontSize: 9, color: "var(--text3)", fontWeight: 600, whiteSpace: "nowrap" }}>{p.label}</span>
+                {/* Hodnota nad sloupečkem */}
+                {isSelected && (
+                  <div style={{
+                    position: "absolute",
+                    bottom: barH + 4,
+                    background: "var(--blue)",
+                    color: "#fff",
+                    padding: "3px 8px",
+                    borderRadius: 6,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    whiteSpace: "nowrap",
+                    pointerEvents: "none",
+                    zIndex: 10
+                  }}>
+                    {fmtKc(p.nw)}
+                  </div>
+                )}
+                {/* Sloupeček */}
+                <div 
+                  onClick={() => setSelectedMonth(isSelected ? null : p.ym)}
+                  style={{ 
+                    width: "100%", 
+                    height: barH, 
+                    borderRadius: "5px 5px 0 0", 
+                    background: isActive ? "var(--blue)" : "rgba(0,113,227,0.14)", 
+                    cursor: "pointer",
+                    transition: "background 0.15s, transform 0.15s",
+                    transform: isSelected ? "scale(1.05)" : "scale(1)"
+                  }} 
+                  onMouseEnter={e => !isActive && (e.currentTarget.style.background = "rgba(0,113,227,0.25)")}
+                  onMouseLeave={e => !isActive && (e.currentTarget.style.background = "rgba(0,113,227,0.14)")}
+                />
+                {/* Label */}
+                <span style={{ position: "absolute", bottom: -18, fontSize: 9, color: isActive ? "var(--blue)" : "var(--text3)", fontWeight: 600, whiteSpace: "nowrap" }}>{p.label}</span>
               </div>
             );
           })}
