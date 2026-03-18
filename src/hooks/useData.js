@@ -457,6 +457,16 @@ export function useData() {
   const diff    = netWorth - prevNW;
   const diffPct = prevNW !== 0 ? ((diff / prevNW) * 100).toFixed(1) : "0.0";
 
+  // YTD (Year-to-date) calculation
+  const currentYear = new Date().getFullYear().toString();
+  const ytdStartMonth = allDates.find(d => d.startsWith(currentYear + "-"));
+  const ytdStartNW = ytdStartMonth
+    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === ytdStartMonth); return s + (h ? h.value : 0); }, 0)
+    - pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === ytdStartMonth); return s + (h ? h.value : 0); }, 0)
+    : netWorth;
+  const ytdDiff = netWorth - ytdStartNW;
+  const ytdDiffPct = ytdStartNW !== 0 ? ((ytdDiff / ytdStartNW) * 100).toFixed(1) : "0.0";
+
   const availableMonths = [...new Set([
     ...aktiva.flatMap(i => (i.history || []).map(h => h.date)),
     ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
@@ -484,6 +494,7 @@ export function useData() {
     aktiva, pasiva, goals, catsA, catsP,
     loading, syncing, toast, sheetsOk,
     totalA, totalP, netWorth, diff, diffPct,
+    ytdDiff, ytdDiffPct,
     availableMonths,
     historyData,
     addAktivum, updateAktivum, deleteAktivum,

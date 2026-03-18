@@ -1,8 +1,9 @@
 import React from "react";
 import { fmtShort, fmtKc, todayYM, fmtDate } from "../utils/format";
 
-export function HeroSection({ netWorth, diff, diffPct }) {
+export function HeroSection({ netWorth, diff, diffPct, ytdDiff, ytdDiffPct }) {
   const isPos = diff >= 0;
+  const isYtdPos = ytdDiff >= 0;
   const today = new Date().toLocaleDateString("cs-CZ", { day: "numeric", month: "long", year: "numeric" });
 
   return (
@@ -18,16 +19,32 @@ export function HeroSection({ netWorth, diff, diffPct }) {
         <span style={{ fontSize: "0.45em", fontWeight: 600, verticalAlign: "super", marginRight: 4, color: "var(--text2)" }}>Kč</span>
         {Number(netWorth).toLocaleString("cs-CZ")}
       </div>
+      
+      {/* Měsíční změna */}
       {diff !== 0 && (
         <div style={{
           display: "inline-flex", alignItems: "center", gap: 5,
           background: isPos ? "var(--green-bg)" : "var(--red-bg)",
           color: isPos ? "var(--green)" : "var(--red)",
-          fontSize: 13, fontWeight: 700, padding: "5px 14px", borderRadius: 99, marginBottom: 8,
+          fontSize: 13, fontWeight: 700, padding: "5px 14px", borderRadius: 99, marginBottom: 6,
         }}>
-          {isPos ? "↑" : "↓"} {fmtKc(Math.abs(diff))} ({Math.abs(diffPct)} %) vs. posledni snapshot
+          {isPos ? "↑" : "↓"} {fmtKc(Math.abs(diff))} ({Math.abs(diffPct)} %) vs. poslední snapshot
         </div>
       )}
+      
+      {/* YTD změna */}
+      {ytdDiff !== 0 && (
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          background: isYtdPos ? "rgba(52, 199, 89, 0.08)" : "rgba(255, 59, 48, 0.08)",
+          color: isYtdPos ? "var(--green)" : "var(--red)",
+          fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 99, marginBottom: 8,
+          border: `1px solid ${isYtdPos ? "rgba(52, 199, 89, 0.2)" : "rgba(255, 59, 48, 0.2)"}`,
+        }}>
+          {isYtdPos ? "↑" : "↓"} {fmtKc(Math.abs(ytdDiff))} ({Math.abs(ytdDiffPct)} %) od začátku roku
+        </div>
+      )}
+      
       <div style={{ fontSize: 13, color: "var(--text3)" }}>{today}</div>
     </div>
   );

@@ -19,6 +19,7 @@ export default function App() {
     aktiva, pasiva, goals, catsA, catsP,
     loading, syncing, toast, sheetsOk,
     totalA, totalP, netWorth, diff, diffPct,
+    ytdDiff, ytdDiffPct,
     availableMonths,
     historyData,
     addAktivum, updateAktivum, deleteAktivum,
@@ -61,7 +62,7 @@ export default function App() {
         />
       ) : (
         <div className="page">
-          <HeroSection netWorth={netWorth} diff={diff} diffPct={diffPct} />
+          <HeroSection netWorth={netWorth} diff={diff} diffPct={diffPct} ytdDiff={ytdDiff} ytdDiffPct={ytdDiffPct} />
           <StatCards totalA={totalA} totalP={totalP} aktiva={aktiva} pasiva={pasiva} />
 
           <div className="section-label">Aktiva <small>{fmtKc(totalA)}</small></div>
