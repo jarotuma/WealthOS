@@ -31,6 +31,7 @@ function EditPanel({ item, type, onSave, onCancel }) {
   const defaultYear = String(nextYear);
 
   const [value,   setValue]  = useState(String(item.value));
+  const [color,   setColor]  = useState(item.color || (type === "a" ? "#34c759" : "#ff3b30"));
   const [selM,    setSelM]   = useState(defaultMonth);
   const [selY,    setSelY]   = useState(defaultYear);
 
@@ -50,8 +51,21 @@ function EditPanel({ item, type, onSave, onCancel }) {
       <select className="inp" value={selY} onChange={e => setSelY(e.target.value)} style={{ maxWidth: 84 }}>
         {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
       </select>
+      <label style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600, whiteSpace: "nowrap" }}>Barva:</label>
+      <input 
+        type="color" 
+        value={color} 
+        onChange={e => setColor(e.target.value)}
+        style={{
+          width: 40,
+          height: 32,
+          border: "1.5px solid var(--border)",
+          borderRadius: 8,
+          cursor: "pointer"
+        }}
+      />
       <button className={`btn-primary${type==="p"?" red":""}`}
-        onClick={() => { if (value && !isNaN(+value)) onSave({...item, value:+value, date:joinYM(selY,selM)}); }}>
+        onClick={() => { if (value && !isNaN(+value)) onSave({...item, value:+value, color, date:joinYM(selY,selM)}); }}>
         Uložit
       </button>
       <button className="btn-ghost" onClick={onCancel}>Zrušit</button>
@@ -68,12 +82,13 @@ function AddForm({ type, cats, onAdd, onClose }) {
   const [icon,  setIcon]  = useState(type==="a" ? "💰" : "💸");
   const [month, setMonth] = useState(initM);
   const [year,  setYear]  = useState(initY);
+  const [color, setColor] = useState(type==="a" ? "#34c759" : "#ff3b30");
   const icons = type==="a" ? ALL_ICONS : ALL_ICONS_P;
 
   const handleAdd = () => {
     if (!name.trim() || !value || isNaN(+value)) return;
     onAdd({ id: String(Date.now()), icon, name: name.trim(), cat: cat||cats[0]||"Ostatní",
-      value: +value, color: type==="a"?"#34c759":"#ff3b30", date: joinYM(year,month) });
+      value: +value, color, date: joinYM(year,month) });
     onClose();
   };
 
@@ -104,6 +119,24 @@ function AddForm({ type, cats, onAdd, onClose }) {
             cursor: "pointer",
           }}>{em}</button>
         ))}
+      </div>
+      {/* Color picker */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)" }}>Barva:</label>
+        <input 
+          type="color" 
+          value={color} 
+          onChange={e => setColor(e.target.value)}
+          style={{
+            width: 50,
+            height: 32,
+            border: "1.5px solid var(--border)",
+            borderRadius: 8,
+            cursor: "pointer",
+            background: "var(--surface)"
+          }}
+        />
+        <span style={{ fontSize: 11, color: "var(--text3)", fontFamily: "monospace" }}>{color}</span>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <button className={`btn-primary${type==="p"?" red":""}`} onClick={handleAdd}>Přidat</button>
@@ -173,9 +206,18 @@ export default function AssetList({ type, items, cats, onAdd, onUpdate, onDelete
               Aktualizovat
             </button>
 
-            {/* Value */}
-            <div className="mono" style={{ fontSize: 13, fontWeight: 600, color, whiteSpace: "nowrap" }}>
-              {sign}{fmtKc(item.value)}
+            {/* Value with color indicator */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{
+                width: 8,
+                height: 8,
+                borderRadius: 3,
+                background: item.color || "#888",
+                flexShrink: 0
+              }} />
+              <div className="mono" style={{ fontSize: 13, fontWeight: 600, color, whiteSpace: "nowrap" }}>
+                {sign}{fmtKc(item.value)}
+              </div>
             </div>
 
             {/* Delete — large touch target */}

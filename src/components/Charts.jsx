@@ -273,7 +273,7 @@ export function PieCharts({ aktiva, pasiva }) {
     return sorted.map((i, idx) => ({ 
       label: i.name, 
       pct: total > 0 ? Math.round((Number(i.value)/total)*100) : 0, 
-      color: colors[idx % colors.length] // Barva podle pozice v seřazeném seznamu
+      color: i.color || colors[idx % colors.length] // Použij vlastní barvu položky, nebo fallback na paletu
     }))
     .filter(d => d.pct > 0);
   };

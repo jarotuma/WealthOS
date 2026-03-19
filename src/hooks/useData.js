@@ -13,12 +13,20 @@ function loadLS() {
 function saveLS(data) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {}
 }
-function ensureHistory(items) {
+function ensureHistory(items, type = "a") {
   return (items || []).map(item => {
+    // Ensure history
+    let updated = item;
     if (!item.history || !Array.isArray(item.history)) {
-      return { ...item, history: item.date && item.value ? [{ date: item.date, value: Number(item.value) }] : [] };
+      updated = { ...item, history: item.date && item.value ? [{ date: item.date, value: Number(item.value) }] : [] };
     }
-    return item;
+    
+    // Ensure color (fallback pro staré položky)
+    if (!updated.color) {
+      updated = { ...updated, color: type === "a" ? "#34c759" : "#ff3b30" };
+    }
+    
+    return updated;
   });
 }
 function upsertHistory(item, date, value) {
@@ -55,8 +63,8 @@ export function useData() {
         console.warn("WealthOS: VITE_APPS_SCRIPT_URL není nastaveno, offline mód");
         const ls = loadLS();
         if (ls) {
-          setAktiva(ensureHistory(ls.aktiva || []));
-          setPasiva(ensureHistory(ls.pasiva || []));
+          setAktiva(ensureHistory(ls.aktiva || [], "a"));
+          setPasiva(ensureHistory(ls.pasiva || [], "p"));
           setGoals(ls.goals || []);
           setCatsA(ls.catsA || DEFAULT_CATS_A);
           setCatsP(ls.catsP || DEFAULT_CATS_P);
@@ -73,16 +81,16 @@ export function useData() {
 
         const hasSheets = data?.aktiva?.length || data?.pasiva?.length || data?.goals?.length;
         if (hasSheets) {
-          setAktiva(ensureHistory(data.aktiva || []));
-          setPasiva(ensureHistory(data.pasiva || []));
+          setAktiva(ensureHistory(data.aktiva || [], "a"));
+          setPasiva(ensureHistory(data.pasiva || [], "p"));
           setGoals(data.goals || []);
           console.log("WealthOS: Data načtena ze Sheets");
         } else {
           // Sheets prázdné — použij lokální data
           const ls = loadLS();
           if (ls) {
-            setAktiva(ensureHistory(ls.aktiva || []));
-            setPasiva(ensureHistory(ls.pasiva || []));
+            setAktiva(ensureHistory(ls.aktiva || [], "a"));
+            setPasiva(ensureHistory(ls.pasiva || [], "p"));
             setGoals(ls.goals || []);
             setCatsA(ls.catsA || DEFAULT_CATS_A);
             setCatsP(ls.catsP || DEFAULT_CATS_P);
@@ -94,8 +102,8 @@ export function useData() {
         setSheetsOk(false);
         const ls = loadLS();
         if (ls) {
-          setAktiva(ensureHistory(ls.aktiva || []));
-          setPasiva(ensureHistory(ls.pasiva || []));
+          setAktiva(ensureHistory(ls.aktiva || [], "a"));
+          setPasiva(ensureHistory(ls.pasiva || [], "p"));
           setGoals(ls.goals || []);
           setCatsA(ls.catsA || DEFAULT_CATS_A);
           setCatsP(ls.catsP || DEFAULT_CATS_P);
@@ -337,8 +345,8 @@ export function useData() {
           // JSON formát
           const d = JSON.parse(content);
           imported = {
-            aktiva: ensureHistory(d.aktiva || []),
-            pasiva: ensureHistory(d.pasiva || []),
+            aktiva: ensureHistory(d.aktiva || [], "a"),
+            pasiva: ensureHistory(d.pasiva || [], "p"),
             goals: d.goals || [],
             catsA: d.catsA || DEFAULT_CATS_A,
             catsP: d.catsP || DEFAULT_CATS_P
@@ -404,8 +412,8 @@ export function useData() {
           }
           
           imported = {
-            aktiva: ensureHistory(newAktiva),
-            pasiva: ensureHistory(newPasiva),
+            aktiva: ensureHistory(newAktiva, "a"),
+            pasiva: ensureHistory(newPasiva, "p"),
             goals: newGoals,
             catsA: newCatsA.length ? newCatsA : DEFAULT_CATS_A,
             catsP: newCatsP.length ? newCatsP : DEFAULT_CATS_P
