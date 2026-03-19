@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useData } from "./hooks/useData";
 import NavBar from "./components/NavBar";
 import { HeroSection, StatCards } from "./components/Widgets";
+import { MarketPrices } from "./components/MarketPrices";
 import AssetList from "./components/AssetList";
 import { HistoryChart, PieCharts, GoalsSection } from "./components/Charts";
 import AdminPanel from "./components/AdminPanel";
@@ -64,6 +65,9 @@ export default function App() {
         <div className="page">
           <HeroSection netWorth={netWorth} diff={diff} diffPct={diffPct} ytdDiff={ytdDiff} ytdDiffPct={ytdDiffPct} />
           <StatCards totalA={totalA} totalP={totalP} aktiva={aktiva} pasiva={pasiva} />
+          
+          {/* Market prices - zobrazí se jen pokud má Bitcoin nebo Zlato */}
+          <MarketPrices items={[...aktiva, ...pasiva]} />
 
           <div className="section-label">Aktiva <small>{fmtKc(totalA)}</small></div>
           <AssetList type="a" items={aktiva} cats={catsA} onAdd={addAktivum} onUpdate={updateAktivum} onDelete={deleteAktivum} />
