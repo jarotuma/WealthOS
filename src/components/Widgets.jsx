@@ -50,7 +50,12 @@ export function HeroSection({ netWorth, diff, diffPct, ytdDiff, ytdDiffPct }) {
   );
 }
 
-export function StatCards({ totalA, totalP, aktiva, pasiva }) {
+export function StatCards({ totalA, totalP, aktiva, pasiva, aktivaMoM, aktivaMoMPct, aktivaYoY, aktivaYoYPct, pasivaMoM, pasivaMoMPct, pasivaYoY, pasivaYoYPct }) {
+  const isAMoMPos = aktivaMoM >= 0;
+  const isAYoYPos = aktivaYoY >= 0;
+  const isPMoMPos = pasivaMoM >= 0;
+  const isPYoYPos = pasivaYoY >= 0;
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
       <div className="card" style={{ padding: "18px 20px", marginBottom: 0 }}>
@@ -60,8 +65,38 @@ export function StatCards({ totalA, totalP, aktiva, pasiva }) {
         <div className="mono" style={{ fontSize: 22, fontWeight: 500, color: "var(--green)" }}>
           {totalA.toLocaleString("cs-CZ")} Kč
         </div>
-        <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>{aktiva.length} položek</div>
+        <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4, marginBottom: 8 }}>{aktiva.length} položek</div>
+        
+        {/* MoM */}
+        {aktivaMoM !== 0 && (
+          <div style={{ 
+            fontSize: 11, 
+            color: isAMoMPos ? "var(--green)" : "var(--red)",
+            marginBottom: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 4
+          }}>
+            <span style={{ fontWeight: 600 }}>MoM:</span>
+            <span>{isAMoMPos ? "↑" : "↓"} {Math.abs(aktivaMoM).toLocaleString("cs-CZ")} Kč ({Math.abs(aktivaMoMPct)}%)</span>
+          </div>
+        )}
+        
+        {/* YoY */}
+        {aktivaYoY !== 0 && (
+          <div style={{ 
+            fontSize: 11, 
+            color: isAYoYPos ? "var(--green)" : "var(--red)",
+            display: "flex",
+            alignItems: "center",
+            gap: 4
+          }}>
+            <span style={{ fontWeight: 600 }}>YoY:</span>
+            <span>{isAYoYPos ? "↑" : "↓"} {Math.abs(aktivaYoY).toLocaleString("cs-CZ")} Kč ({Math.abs(aktivaYoYPct)}%)</span>
+          </div>
+        )}
       </div>
+      
       <div className="card" style={{ padding: "18px 20px", marginBottom: 0 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text3)", marginBottom: 8 }}>
           Celková pasiva
@@ -69,7 +104,66 @@ export function StatCards({ totalA, totalP, aktiva, pasiva }) {
         <div className="mono" style={{ fontSize: 22, fontWeight: 500, color: "var(--red)" }}>
           −{totalP.toLocaleString("cs-CZ")} Kč
         </div>
-        <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>{pasiva.length} položek</div>
+        <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4, marginBottom: 8 }}>{pasiva.length} položek</div>
+        
+        {/* MoM */}
+        {pasivaMoM !== 0 && (
+          <div style={{ 
+            fontSize: 11, 
+            color: isPMoMPos ? "var(--red)" : "var(--green)", // Obrácené - růst pasiv je špatně
+            marginBottom: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 4
+          }}>
+            <span style={{ fontWeight: 600 }}>MoM:</span>
+            <span>{isPMoMPos ? "↑" : "↓"} {Math.abs(pasivaMoM).toLocaleString("cs-CZ")} Kč ({Math.abs(pasivaMoMPct)}%)</span>
+          </div>
+        )}
+        
+        {/* YoY */}
+        {pasivaYoY !== 0 && (
+          <div style={{ 
+            fontSize: 11, 
+            color: isPYoYPos ? "var(--red)" : "var(--green)", // Obrácené - růst pasiv je špatně
+            display: "flex",
+            alignItems: "center",
+            gap: 4
+          }}>
+            <span style={{ fontWeight: 600 }}>YoY:</span>
+            <span>{isPYoYPos ? "↑" : "↓"} {Math.abs(pasivaYoY).toLocaleString("cs-CZ")} Kč ({Math.abs(pasivaYoYPct)}%)</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function FinancialRatios({ assetLiabilityRatio, liquidityCoverageRatio }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+      <div className="card" style={{ padding: "16px 20px", marginBottom: 0, background: "var(--surface)" }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Celkový poměr A/P
+        </div>
+        <div style={{ fontSize: 28, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>
+          {assetLiabilityRatio}×
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text3)" }}>
+          na každou 1 Kč dluhu
+        </div>
+      </div>
+      
+      <div className="card" style={{ padding: "16px 20px", marginBottom: 0, background: "var(--surface)" }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Likvidní krytí dluhů
+        </div>
+        <div style={{ fontSize: 28, fontWeight: 800, color: "var(--text)", marginBottom: 4 }}>
+          {liquidityCoverageRatio}×
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text3)" }}>
+          bez nemovitostí
+        </div>
       </div>
     </div>
   );

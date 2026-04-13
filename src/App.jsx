@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "./hooks/useData";
 import NavBar from "./components/NavBar";
-import { HeroSection, StatCards } from "./components/Widgets";
+import { HeroSection, StatCards, FinancialRatios } from "./components/Widgets";
 import { MarketPrices } from "./components/MarketPrices";
 import AssetList from "./components/AssetList";
 import { HistoryChart, PieCharts, GoalsSection } from "./components/Charts";
@@ -21,6 +21,9 @@ export default function App() {
     loading, syncing, toast, sheetsOk,
     totalA, totalP, netWorth, diff, diffPct,
     ytdDiff, ytdDiffPct,
+    aktivaMoM, aktivaMoMPct, pasivaMoM, pasivaMoMPct,
+    aktivaYoY, aktivaYoYPct, pasivaYoY, pasivaYoYPct,
+    assetLiabilityRatio, liquidityCoverageRatio,
     availableMonths,
     historyData,
     addAktivum, updateAktivum, deleteAktivum,
@@ -64,7 +67,26 @@ export default function App() {
       ) : (
         <div className="page">
           <HeroSection netWorth={netWorth} diff={diff} diffPct={diffPct} ytdDiff={ytdDiff} ytdDiffPct={ytdDiffPct} />
-          <StatCards totalA={totalA} totalP={totalP} aktiva={aktiva} pasiva={pasiva} />
+          <StatCards 
+            totalA={totalA} 
+            totalP={totalP} 
+            aktiva={aktiva} 
+            pasiva={pasiva}
+            aktivaMoM={aktivaMoM}
+            aktivaMoMPct={aktivaMoMPct}
+            aktivaYoY={aktivaYoY}
+            aktivaYoYPct={aktivaYoYPct}
+            pasivaMoM={pasivaMoM}
+            pasivaMoMPct={pasivaMoMPct}
+            pasivaYoY={pasivaYoY}
+            pasivaYoYPct={pasivaYoYPct}
+          />
+          
+          {/* Financial Ratios */}
+          <FinancialRatios 
+            assetLiabilityRatio={assetLiabilityRatio}
+            liquidityCoverageRatio={liquidityCoverageRatio}
+          />
           
           {/* Market prices - zobrazí se jen pokud má Bitcoin nebo Zlato */}
           <MarketPrices items={[...aktiva, ...pasiva]} />

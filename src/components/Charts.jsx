@@ -55,7 +55,12 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
     const tA = aktiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const tP = pasiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const [y, m] = ym.split("-");
-    return { ym, nw: tA - tP, label: `${parseInt(m)}/${y.slice(2)}`, year: y };
+    const netWorth = tA - tP;
+    
+    // Debug log
+    console.log(`📊 ${ym}: Aktiva ${tA.toLocaleString('cs-CZ')} - Pasiva ${tP.toLocaleString('cs-CZ')} = Čisté jmění ${netWorth.toLocaleString('cs-CZ')}`);
+    
+    return { ym, nw: netWorth, label: `${parseInt(m)}/${y.slice(2)}`, year: y };
   });
   
   // Filtruj podle výběru
@@ -257,30 +262,18 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
                           }}
                         />
                         
-                        {/* Value tooltip on selected */}
-                        {isSelected && (
-                          <>
-                            <rect
-                              x={c.x - 38}
-                              y={c.y - 32}
-                              width="76"
-                              height="22"
-                              rx="6"
-                              fill="var(--blue)"
-                            />
-                            <text
-                              x={c.x}
-                              y={c.y - 17}
-                              textAnchor="middle"
-                              fill="#fff"
-                              fontSize="11"
-                              fontWeight="700"
-                              fontFamily="Nunito Sans, system-ui, sans-serif"
-                            >
-                              {fmtKc(c.nw)}
-                            </text>
-                          </>
-                        )}
+                        {/* Value label above each point - always visible */}
+                        <text
+                          x={c.x}
+                          y={c.y - 12}
+                          textAnchor="middle"
+                          fill="var(--text3)"
+                          fontSize="10"
+                          fontWeight="600"
+                          fontFamily="Nunito Sans, system-ui, sans-serif"
+                        >
+                          {fmtKc(c.nw)}
+                        </text>
                         
                         {/* X-axis labels */}
                         <text
@@ -301,7 +294,6 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
               );
             })()}
           </svg>
-          </div>
         </div>
       </div>
     </div>

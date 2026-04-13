@@ -188,10 +188,45 @@ export default function AssetList({ type, items, cats, onAdd, onUpdate, onDelete
               background: (item.color||"#888")+"18", flexShrink: 0,
             }}>{item.icon}</div>
 
-            {/* Info */}
+            {/* Info + Changes */}
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
               <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>{item.cat} · {fmtDate(item.date)}</div>
+              {/* MoM and YoY badges */}
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                {item.mom !== 0 && (
+                  <div style={{ 
+                    fontSize: 10, 
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    background: (isA ? item.mom >= 0 : item.mom <= 0) 
+                      ? "rgba(52, 199, 89, 0.15)" 
+                      : "rgba(255, 59, 48, 0.15)",
+                    color: (isA ? item.mom >= 0 : item.mom <= 0) 
+                      ? "var(--green)" 
+                      : "var(--red)"
+                  }}>
+                    MoM {item.mom >= 0 ? "+" : ""}{item.momPct}%
+                  </div>
+                )}
+                {item.yoy !== 0 && (
+                  <div style={{ 
+                    fontSize: 10, 
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    background: (isA ? item.yoy >= 0 : item.yoy <= 0) 
+                      ? "rgba(52, 199, 89, 0.15)" 
+                      : "rgba(255, 59, 48, 0.15)",
+                    color: (isA ? item.yoy >= 0 : item.yoy <= 0) 
+                      ? "var(--green)" 
+                      : "var(--red)"
+                  }}>
+                    YoY {item.yoy >= 0 ? "+" : ""}{item.yoyPct}%
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Update btn */}

@@ -29,6 +29,33 @@ function ensureHistory(items, type = "a") {
     return updated;
   });
 }
+
+// Helper: Přidá MoM a YoY data k položkám
+function enrichWithChanges(items, prevMonth, yoyMonth) {
+  return items.map(item => {
+    const currentValue = item.value || 0;
+    
+    // MoM
+    const prevHistory = prevMonth ? (item.history || []).find(h => h.date === prevMonth) : null;
+    const prevValue = prevHistory ? prevHistory.value : currentValue;
+    const mom = currentValue - prevValue;
+    const momPct = prevValue !== 0 ? ((mom / prevValue) * 100).toFixed(1) : "0.0";
+    
+    // YoY (stejný měsíc minulého roku)
+    const yoyHistory = yoyMonth ? (item.history || []).find(h => h.date === yoyMonth) : null;
+    const yoyValue = yoyHistory ? yoyHistory.value : currentValue;
+    const yoy = currentValue - yoyValue;
+    const yoyPct = yoyValue !== 0 ? ((yoy / yoyValue) * 100).toFixed(1) : "0.0";
+    
+    return {
+      ...item,
+      mom,
+      momPct,
+      yoy,
+      yoyPct
+    };
+  });
+}
 function upsertHistory(item, date, value) {
   const history = item.history || [];
   const exists = history.find(h => h.date === date);
@@ -475,6 +502,53 @@ export function useData() {
   const ytdDiff = netWorth - ytdStartNW;
   const ytdDiffPct = ytdStartNW !== 0 ? ((ytdDiff / ytdStartNW) * 100).toFixed(1) : "0.0";
 
+  // YoY (Year-over-Year) - porovná stejný měsíc minulého roku
+  const currentYM = todayYM(); // např. "2026-04"
+  const [year, month] = currentYM.split("-");
+  const lastYearSameMonth = `${parseInt(year) - 1}-${month}`; // např. "2025-04"
+  
+  const yoyMonth = allDates.includes(lastYearSameMonth) ? lastYearSameMonth : null;
+  
+  // MoM a YoY pro aktiva a pasiva zvlášť
+  const prevTotalA = prevMonth
+    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
+    : totalA;
+  const prevTotalP = prevMonth
+    ? pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
+    : totalP;
+  
+  const aktivaMoM = totalA - prevTotalA;
+  const aktivaMoMPct = prevTotalA !== 0 ? ((aktivaMoM / prevTotalA) * 100).toFixed(1) : "0.0";
+  const pasivaMoM = totalP - prevTotalP;
+  const pasivaMoMPct = prevTotalP !== 0 ? ((pasivaMoM / prevTotalP) * 100).toFixed(1) : "0.0";
+
+  const yoyTotalA = yoyMonth
+    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === yoyMonth); return s + (h ? h.value : 0); }, 0)
+    : totalA;
+  const yoyTotalP = yoyMonth
+    ? pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === yoyMonth); return s + (h ? h.value : 0); }, 0)
+    : totalP;
+  
+  const aktivaYoY = totalA - yoyTotalA;
+  const aktivaYoYPct = yoyTotalA !== 0 ? ((aktivaYoY / yoyTotalA) * 100).toFixed(1) : "0.0";
+  const pasivaYoY = totalP - yoyTotalP;
+  const pasivaYoYPct = yoyTotalP !== 0 ? ((pasivaYoY / yoyTotalP) * 100).toFixed(1) : "0.0";
+
+  // Finanční indikátory
+  // 1. Celkový poměr A/P (Asset to Liability Ratio)
+  const assetLiabilityRatio = totalP > 0 ? (totalA / totalP).toFixed(2) : "∞";
+  
+  // 2. Likvidní krytí dluhů (bez nemovitostí)
+  const nemovitostiValue = aktiva
+    .filter(i => i.cat?.toLowerCase().includes("nemovitost"))
+    .reduce((s, i) => s + Number(i.value), 0);
+  const liquidAssets = totalA - nemovitostiValue;
+  const liquidityCoverageRatio = totalP > 0 ? (liquidAssets / totalP).toFixed(2) : "∞";
+
+  // Obohať položky o MoM a YoY data
+  const aktivaWithChanges = enrichWithChanges(aktiva, prevMonth, yoyMonth);
+  const pasivaWithChanges = enrichWithChanges(pasiva, prevMonth, yoyMonth);
+
   const availableMonths = [...new Set([
     ...aktiva.flatMap(i => (i.history || []).map(h => h.date)),
     ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
@@ -499,10 +573,15 @@ export function useData() {
   }).reverse(); // reverse aby byl chronologický (nejstarší první)
 
   return {
-    aktiva, pasiva, goals, catsA, catsP,
+    aktiva: aktivaWithChanges, 
+    pasiva: pasivaWithChanges, 
+    goals, catsA, catsP,
     loading, syncing, toast, sheetsOk,
     totalA, totalP, netWorth, diff, diffPct,
     ytdDiff, ytdDiffPct,
+    aktivaMoM, aktivaMoMPct, pasivaMoM, pasivaMoMPct,
+    aktivaYoY, aktivaYoYPct, pasivaYoY, pasivaYoYPct,
+    assetLiabilityRatio, liquidityCoverageRatio,
     availableMonths,
     historyData,
     addAktivum, updateAktivum, deleteAktivum,
