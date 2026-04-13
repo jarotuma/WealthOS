@@ -150,64 +150,157 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
         </div>
         {/* Scrollable wrapper for mobile */}
         <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
-          <div style={{ 
-            display: "flex", 
-            alignItems: "flex-end", 
-            gap: 5, 
-            height: 130, 
-            paddingBottom: 22, 
-            position: "relative",
-            minWidth: points.length > 6 ? `${points.length * 40}px` : "100%" // Dynamic min-width
-          }}>
-            {[0.33, 0.66].map((f, i) => (
-              <div key={i} style={{ position: "absolute", left: 0, right: 0, zIndex: 0, bottom: `${f * 108 + 22}px`, borderTop: "1px dashed var(--border)" }} />
+          <svg 
+            viewBox="0 0 700 160" 
+            style={{ 
+              width: "100%", 
+              minWidth: points.length > 6 ? `${points.length * 60}px` : "100%",
+              height: "160px"
+            }}
+          >
+            {/* Grid lines */}
+            {[0.25, 0.5, 0.75].map((f, i) => (
+              <line
+                key={i}
+                x1="0"
+                y1={130 - f * 110}
+                x2="700"
+                y2={130 - f * 110}
+                stroke="var(--border)"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+                opacity="0.3"
+              />
             ))}
-          {points.map((p, i) => {
-            const barH   = 18 + ((p.nw - minNW) / range) * 88;
-            const isLast = i === points.length - 1;
-            const isSelected = selectedMonth === p.ym;
-            const isActive = isSelected || isLast;
             
-            return (
-              <div key={p.ym} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", zIndex: 1 }}>
-                {/* Hodnota nad sloupečkem */}
-                {isSelected && (
-                  <div style={{
-                    position: "absolute",
-                    bottom: barH + 4,
-                    background: "var(--blue)",
-                    color: "#fff",
-                    padding: "3px 8px",
-                    borderRadius: 6,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    whiteSpace: "nowrap",
-                    pointerEvents: "none",
-                    zIndex: 10
-                  }}>
-                    {fmtKc(p.nw)}
-                  </div>
-                )}
-                {/* Sloupeček */}
-                <div 
-                  onClick={() => setSelectedMonth(isSelected ? null : p.ym)}
-                  style={{ 
-                    width: "100%", 
-                    height: barH, 
-                    borderRadius: "5px 5px 0 0", 
-                    background: isActive ? "var(--blue)" : "rgba(0,113,227,0.14)", 
-                    cursor: "pointer",
-                    transition: "background 0.15s, transform 0.15s",
-                    transform: isSelected ? "scale(1.05)" : "scale(1)"
-                  }} 
-                  onMouseEnter={e => !isActive && (e.currentTarget.style.background = "rgba(0,113,227,0.25)")}
-                  onMouseLeave={e => !isActive && (e.currentTarget.style.background = "rgba(0,113,227,0.14)")}
-                />
-                {/* Label */}
-                <span style={{ position: "absolute", bottom: -18, fontSize: 9, color: isActive ? "var(--blue)" : "var(--text3)", fontWeight: 600, whiteSpace: "nowrap" }}>{p.label}</span>
-              </div>
-            );
-          })}
+            {(() => {
+              // Calculate points for the line
+              const width = 700;
+              const height = 130;
+              const padding = 20;
+              const stepX = (width - 2 * padding) / (points.length - 1 || 1);
+              
+              const coords = points.map((p, i) => {
+                const x = padding + i * stepX;
+                const y = height - padding - ((p.nw - minNW) / range) * (height - 2 * padding - 10);
+                return { x, y, ...p };
+              });
+              
+              // Create path for area fill
+              const areaPath = coords.length > 0
+                ? `M ${coords[0].x} ${height - padding} ` +
+                  coords.map(c => `L ${c.x} ${c.y}`).join(" ") +
+                  ` L ${coords[coords.length - 1].x} ${height - padding} Z`
+                : "";
+              
+              // Create path for line
+              const linePath = coords.length > 0
+                ? `M ${coords.map(c => `${c.x} ${c.y}`).join(" L ")}`
+                : "";
+              
+              return (
+                <>
+                  {/* Area fill */}
+                  <path
+                    d={areaPath}
+                    fill="rgba(0, 113, 227, 0.1)"
+                    stroke="none"
+                  />
+                  
+                  {/* Line */}
+                  <path
+                    d={linePath}
+                    fill="none"
+                    stroke="var(--blue)"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  
+                  {/* Points */}
+                  {coords.map((c, i) => {
+                    const isLast = i === points.length - 1;
+                    const isSelected = selectedMonth === c.ym;
+                    const isActive = isSelected || isLast;
+                    
+                    return (
+                      <g key={c.ym}>
+                        {/* Larger invisible hitbox for easier clicking */}
+                        <circle
+                          cx={c.x}
+                          cy={c.y}
+                          r="15"
+                          fill="transparent"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => setSelectedMonth(isSelected ? null : c.ym)}
+                          onMouseEnter={(e) => {
+                            const point = e.currentTarget.nextSibling;
+                            if (point && !isActive) point.setAttribute("r", "5");
+                          }}
+                          onMouseLeave={(e) => {
+                            const point = e.currentTarget.nextSibling;
+                            if (point && !isActive) point.setAttribute("r", "4");
+                          }}
+                        />
+                        
+                        {/* Visible point */}
+                        <circle
+                          cx={c.x}
+                          cy={c.y}
+                          r={isActive ? "6" : "4"}
+                          fill="var(--blue)"
+                          stroke="var(--bg)"
+                          strokeWidth="2.5"
+                          style={{ 
+                            cursor: "pointer",
+                            transition: "r 0.2s ease"
+                          }}
+                        />
+                        
+                        {/* Value tooltip on selected */}
+                        {isSelected && (
+                          <>
+                            <rect
+                              x={c.x - 38}
+                              y={c.y - 32}
+                              width="76"
+                              height="22"
+                              rx="6"
+                              fill="var(--blue)"
+                            />
+                            <text
+                              x={c.x}
+                              y={c.y - 17}
+                              textAnchor="middle"
+                              fill="#fff"
+                              fontSize="11"
+                              fontWeight="700"
+                              fontFamily="Nunito Sans, system-ui, sans-serif"
+                            >
+                              {fmtKc(c.nw)}
+                            </text>
+                          </>
+                        )}
+                        
+                        {/* X-axis labels */}
+                        <text
+                          x={c.x}
+                          y={height + 8}
+                          textAnchor="middle"
+                          fill={isActive ? "var(--blue)" : "var(--text3)"}
+                          fontSize="9"
+                          fontWeight="600"
+                          fontFamily="Nunito Sans, system-ui, sans-serif"
+                        >
+                          {c.label}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </>
+              );
+            })()}
+          </svg>
           </div>
         </div>
       </div>
