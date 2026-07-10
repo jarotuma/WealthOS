@@ -55,12 +55,7 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
     const tA = aktiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const tP = pasiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const [y, m] = ym.split("-");
-    const netWorth = tA - tP;
-    
-    // Debug log
-    console.log(`📊 ${ym}: Aktiva ${tA.toLocaleString('cs-CZ')} - Pasiva ${tP.toLocaleString('cs-CZ')} = Čisté jmění ${netWorth.toLocaleString('cs-CZ')}`);
-    
-    return { ym, nw: netWorth, label: `${parseInt(m)}/${y.slice(2)}`, year: y };
+    return { ym, nw: tA - tP, label: `${parseInt(m)}/${y.slice(2)}`, year: y };
   });
   
   // Filtruj podle výběru
