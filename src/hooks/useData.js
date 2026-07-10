@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
-import { loadAll, addItem, updateItem, deleteItem, saveGoals, saveAll } from "../api/sheets";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { loadAll, addItem, updateItem, deleteItem, saveGoals, saveAll, getMeta } from "../api/sheets";
 import { todayYM } from "../utils/format";
+
+const DEV = import.meta.env.DEV;
 
 const DEFAULT_CATS_A = ["Bankovní účet","Akcie","ETF","Krypto","Nemovitost","Automobil","Dluhopisy","Zlato / kovy","Hotovost","Jiné investice","Ostatní"];
 const DEFAULT_CATS_P = ["Hypotéka","Spotřební půjčka","Kreditní karta","Leasing","Studentská půjčka","Jiný dluh","Ostatní"];
@@ -83,11 +85,14 @@ export function useData() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
+  // Timestamp poslední změny na serveru (pro detekci konfliktů)
+  const serverLastModifiedRef = useRef(0);
+
   // ── Init ──────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       if (!SCRIPT_URL) {
-        console.warn("WealthOS: VITE_APPS_SCRIPT_URL není nastaveno, offline mód");
+        if (DEV) console.warn("WealthOS: VITE_APPS_SCRIPT_URL není nastaveno, offline mód");
         const ls = loadLS();
         if (ls) {
           setAktiva(ensureHistory(ls.aktiva || [], "a"));
@@ -101,9 +106,9 @@ export function useData() {
       }
 
       try {
-        console.log("WealthOS: Načítám data ze Sheets...");
-        const data = await loadAll();
-        console.log("WealthOS: Sheets odpověděl:", data);
+        const response = await loadAll();
+        const data = response?.data;
+        serverLastModifiedRef.current = response?.lastModified || 0;
         setSheetsOk(true);
 
         const hasSheets = data?.aktiva?.length || data?.pasiva?.length || data?.goals?.length;
@@ -111,7 +116,6 @@ export function useData() {
           setAktiva(ensureHistory(data.aktiva || [], "a"));
           setPasiva(ensureHistory(data.pasiva || [], "p"));
           setGoals(data.goals || []);
-          console.log("WealthOS: Data načtena ze Sheets");
         } else {
           // Sheets prázdné — použij lokální data
           const ls = loadLS();
@@ -121,7 +125,6 @@ export function useData() {
             setGoals(ls.goals || []);
             setCatsA(ls.catsA || DEFAULT_CATS_A);
             setCatsP(ls.catsP || DEFAULT_CATS_P);
-            console.log("WealthOS: Sheets prázdné, používám lokální data");
           }
         }
       } catch (err) {
@@ -152,18 +155,15 @@ export function useData() {
     localFn();
 
     // 2. Pokud není URL, přeskoč
-    if (!SCRIPT_URL) {
-      console.log("WealthOS: Bez Sheets URL, uloženo jen lokálně");
-      return;
-    }
+    if (!SCRIPT_URL) return;
 
     setSyncing(true);
     try {
-      console.log("WealthOS: Ukládám do Sheets...");
-      await apiCall();
+      const result = await apiCall();
+      // Zaznamenej nový server timestamp (vrací ho každá mutace)
+      if (result?.lastModified) serverLastModifiedRef.current = result.lastModified;
       setSheetsOk(true);
       showToast(msg);
-      console.log("WealthOS: Uloženo do Sheets ✓", msg);
     } catch (err) {
       console.error("WealthOS: Sheets chyba:", err.message);
       setSheetsOk(false);
@@ -184,15 +184,8 @@ export function useData() {
   }, [sync]);
 
   const updateAktivum = useCallback((item) => {
-    console.log("🔄 updateAktivum called with:", item);
-    console.log("  Current history:", item.history);
-    
     const newHistory = upsertHistory(item, item.date, item.value);
-    console.log("  New history after upsert:", newHistory);
-    
     const updated = { ...item, history: newHistory };
-    console.log("  Final updated object:", updated);
-    
     sync(
       () => updateItem("a", updated),
       () => setAktiva(p => p.map(x => x.id === item.id ? updated : x)),
@@ -458,8 +451,29 @@ export function useData() {
         // Synchronizuj do Sheets pokud je připojeno
         if (SCRIPT_URL) {
           try {
-            console.log("🔄 Synchronizuji importovaná data do Sheets...");
-            await saveAll(imported);
+            // Detekce konfliktu: změnil někdo data v Sheets od našeho načtení?
+            // (např. z jiného zařízení) — saveAll je přepíše, tak radši varuj.
+            try {
+              const meta = await getMeta();
+              const serverTs = meta?.lastModified || 0;
+              if (serverTs > serverLastModifiedRef.current) {
+                const proceed = window.confirm(
+                  "⚠️ Pozor: data v Google Sheets byla mezitím změněna " +
+                  "(pravděpodobně z jiného zařízení).\n\n" +
+                  "Import je PŘEPÍŠE. Pokračovat?\n\n" +
+                  "(Zrušit = import zůstane jen lokálně, Sheets se nezmění)"
+                );
+                if (!proceed) {
+                  showToast("Import uložen jen lokálně, Sheets nezměněny", "error");
+                  return;
+                }
+              }
+            } catch {
+              // getMeta selhal (starý Apps Script bez getMeta) — pokračuj bez kontroly
+            }
+
+            const result = await saveAll(imported);
+            if (result?.lastModified) serverLastModifiedRef.current = result.lastModified;
             setSheetsOk(true);
             showToast("✅ Data synchronizována do Google Sheets");
           } catch (err) {
