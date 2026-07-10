@@ -1,6 +1,8 @@
 // ─────────────────────────────────────────────────────────────
-//  sheets.js — vše přes GET parametry (Apps Script redirect fix)
-//  POST → GET redirect je známý Apps Script bug, proto GET everywhere
+//  sheets.js — v2: POST s text/plain
+//  - Data v těle requestu → žádný limit délky URL
+//  - text/plain → žádný CORS preflight (Apps Script ho neumí)
+//  - Každá odpověď obsahuje lastModified pro detekci konfliktů
 // ─────────────────────────────────────────────────────────────
 
 const SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || "";
@@ -8,11 +10,10 @@ const SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || "";
 async function apiFetch(params) {
   if (!SCRIPT_URL) throw new Error("Chybí VITE_APPS_SCRIPT_URL");
 
-  // Serializuj data jako URL parametr — obejde POST→GET redirect problém
-  const url = SCRIPT_URL + "?payload=" + encodeURIComponent(JSON.stringify(params));
-
-  const res = await fetch(url, {
-    method: "GET",
+  const res = await fetch(SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(params),
     redirect: "follow",
   });
 
@@ -27,9 +28,15 @@ async function apiFetch(params) {
   return json;
 }
 
+// Vrací { data, lastModified }
 export async function loadAll() {
   if (!SCRIPT_URL) return null;
-  return apiFetch({ action: "fetchAll" }).then(r => r.data);
+  return apiFetch({ action: "fetchAll" });
+}
+
+// Lehký dotaz jen na timestamp poslední změny (pro detekci konfliktů)
+export async function getMeta() {
+  return apiFetch({ action: "getMeta" });
 }
 
 export async function addItem(type, item) {
@@ -37,11 +44,7 @@ export async function addItem(type, item) {
 }
 
 export async function updateItem(type, item) {
-  console.log("📤 API updateItem called:", { type, item });
-  console.log("  item.history:", item.history);
-  const result = await apiFetch({ action: "updateItem", type, item });
-  console.log("📥 API updateItem response:", result);
-  return result;
+  return apiFetch({ action: "updateItem", type, item });
 }
 
 export async function deleteItem(type, id) {
