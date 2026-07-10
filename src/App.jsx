@@ -88,8 +88,8 @@ export default function App() {
             liquidityCoverageRatio={liquidityCoverageRatio}
           />
           
-          {/* Market prices - zobrazí se jen pokud má Bitcoin nebo Zlato */}
-          <MarketPrices items={[...aktiva, ...pasiva]} />
+          {/* Tržní ceny zlata */}
+          <MarketPrices />
 
           <div className="section-label">Aktiva <small>{fmtKc(totalA)}</small></div>
           <AssetList type="a" items={aktiva} cats={catsA} onAdd={addAktivum} onUpdate={updateAktivum} onDelete={deleteAktivum} />
