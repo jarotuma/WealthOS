@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { fmtKc, fmtDate, MONTHS, YEARS, splitYM, joinYM } from "../utils/format";
+import { useConfirm } from "./ConfirmDialog";
 
 // ── Inline editace záznamu ─────────────────────────────────────
 function HistoryRowEdit({ entry, item, type, onSave, onCancel }) {
@@ -43,6 +44,7 @@ function HistoryRowEdit({ entry, item, type, onSave, onCancel }) {
 // ── Karta jedné položky s její historií ───────────────────────
 function ItemHistoryCard({ item, type, onUpdateHistory, onDeleteHistory }) {
   const [editDate, setEditDate] = useState(null); // date klíč editovaného záznamu
+  const confirm = useConfirm();
   const isA     = type === "a";
   const color   = isA ? "var(--green)" : "var(--red)";
   const sign    = isA ? "" : "−";
@@ -146,7 +148,16 @@ function ItemHistoryCard({ item, type, onUpdateHistory, onDeleteHistory }) {
 
                 {/* Smazání záznamu */}
                 <button
-                  onClick={() => { if (history.length <= 1) { alert("Nelze smazat jediný záznam. Smaž celou položku."); return; } if (window.confirm(`Smazat záznam ${fmtDate(entry.date)}?`)) onDeleteHistory(item.id, entry.date); }}
+                  aria-label={`Smazat záznam ${fmtDate(entry.date)}`}
+                  onClick={async () => {
+                    if (history.length <= 1) {
+                      await confirm("Nelze smazat jediný záznam. Pokud chceš odstranit celou položku, smaž ji v přehledu aktiv/pasiv.", { title: "Poslední záznam", confirmLabel: "Rozumím", cancelLabel: "Zavřít", danger: false });
+                      return;
+                    }
+                    if (await confirm(`Opravdu smazat záznam ${fmtDate(entry.date)}?`, { title: "Smazat záznam", confirmLabel: "Smazat" })) {
+                      onDeleteHistory(item.id, entry.date);
+                    }
+                  }}
                   style={{
                     width: 30, height: 30, borderRadius: 8,
                     background: "var(--red-bg)", border: "none",
