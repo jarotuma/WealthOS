@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { fmtKc, fmtDate, MONTHS, YEARS, splitYM, joinYM, todayYM } from "../utils/format";
+import { useConfirm } from "./ConfirmDialog";
 
 export const ALL_ICONS = [
   "💰","🏦","📈","₿","🏠","🚗","💎","🌳","📊","💵",
@@ -150,6 +151,7 @@ function AddForm({ type, cats, onAdd, onClose }) {
 export default function AssetList({ type, items, cats, onAdd, onUpdate, onDelete }) {
   const [editId,  setEditId]  = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+  const confirm = useConfirm();
   const isA    = type === "a";
   const total  = items.reduce((s, i) => s + Number(i.value), 0);
   const color  = isA ? "var(--green)" : "var(--red)";
@@ -256,7 +258,8 @@ export default function AssetList({ type, items, cats, onAdd, onUpdate, onDelete
             </div>
 
             {/* Delete — large touch target */}
-            <button onClick={() => { if (window.confirm(`Smazat "${item.name}"?`)) onDelete(item.id); }}
+            <button onClick={async () => { if (await confirm(`Opravdu smazat "${item.name}"? Tato akce je nevratná.`, { title: "Smazat položku", confirmLabel: "Smazat" })) onDelete(item.id); }}
+              aria-label={`Smazat ${item.name}`}
               style={{
                 width: 44, height: 44, borderRadius: 10, flexShrink: 0,
                 background: "var(--red-bg)", border: "1px solid transparent",
