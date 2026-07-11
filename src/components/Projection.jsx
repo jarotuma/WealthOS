@@ -42,6 +42,13 @@ function addMonths(ym, count) {
   return `${nm}/${ny}`;
 }
 
+// 17 → "17 měs."  |  110 → "9,2 roku"  |  298 → "24,8 roku"
+function fmtHorizon(months) {
+  if (months < 24) return `${months} měs.`;
+  const years = months / 12;
+  return `${years.toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} roku`;
+}
+
 export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
   const [horizon, setHorizon] = useState(12); // měsíců dopředu
 
@@ -72,7 +79,6 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
   }
 
   const { slope, r2, lastYm, n } = model;
-  const projected = netWorth + slope * horizon;
   const growing = slope >= 0;
 
   // Spolehlivost odhadu podle R²
@@ -81,18 +87,18 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
     r2 >= 0.6 ? { label: "Střední", color: "var(--text2)" } :
                 { label: "Nízká",  color: "var(--red)" };
 
-  // Kdy dosáhnu jednotlivých cílů?
-  const goalEta = goals
-    .map(g => {
-      const target = Number(g.target) || 0;
-      if (target <= netWorth) return { ...g, reached: true };
-      if (slope <= 0) return { ...g, reached: false, months: null };
-      const months = Math.ceil((target - netWorth) / slope);
-      if (months > 600) return { ...g, reached: false, months: null }; // >50 let = nesmysl
-      return { ...g, reached: false, months, eta: addMonths(lastYm, months) };
-    })
-    .filter(g => !g.reached && g.months)
-    .slice(0, 3);
+  // ── Horizont důvěryhodnosti ────────────────────────────────
+  // Nemá smysl extrapolovat 25 let z pár měsíců dat. Strop odvozuji
+  // z délky historie (max ~3× tolik, co mám dat) a z kvality fitu (R²).
+  // Za tímto horizontem se místo konkrétního data zobrazí "> X let".
+  const HORIZON_CAP = 120; // absolutní strop: 10 let
+  const qualityFactor = r2 >= 0.9 ? 4 : r2 >= 0.6 ? 3 : 2;
+  const maxMonths = Math.min(HORIZON_CAP, Math.max(12, n * qualityFactor));
+  const maxYears = Math.round(maxMonths / 12);
+
+  // Vybraný horizont nikdy nepřekročí strop spolehlivosti
+  const effHorizon = Math.min(horizon, maxMonths);
+  const projected = netWorth + slope * effHorizon;
 
   // Kulaté milníky — kdy překročím 5 / 10 / 15 / 20 M Kč
   const MILESTONES = [5_000_000, 10_000_000, 15_000_000, 20_000_000];
@@ -101,17 +107,32 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
     .map(target => {
       if (slope <= 0) return null;
       const months = Math.ceil((target - netWorth) / slope);
-      if (months > 600) return null; // >50 let = nesmysl
+      const beyond = months > maxMonths;
       return {
         target,
         months,
-        eta: addMonths(lastYm, months),
+        beyond,
+        eta: beyond ? null : addMonths(lastYm, months),
         label: `${target / 1_000_000} M Kč`,
       };
     })
     .filter(Boolean);
 
-  const HORIZONS = [6, 12, 36];
+  // Kdy dosáhnu vlastních cílů? (bez těch, které duplikují milníky výše)
+  const goalEta = goals
+    .map(g => {
+      const target = Number(g.target) || 0;
+      if (target <= netWorth) return null;
+      if (slope <= 0) return null;
+      if (MILESTONES.includes(target)) return null; // už je mezi milníky
+      const months = Math.ceil((target - netWorth) / slope);
+      const beyond = months > maxMonths;
+      return { ...g, months, beyond, eta: beyond ? null : addMonths(lastYm, months) };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const HORIZONS = [6, 12, 36, 60];
 
   return (
     <div className="card" style={{ padding: "18px 20px", marginBottom: 20 }}>
@@ -126,27 +147,34 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
           📈 Projekce čistého jmění
         </span>
         <div style={{ display: "flex", gap: 4 }}>
-          {HORIZONS.map(h => (
-            <button
-              key={h}
-              onClick={() => setHorizon(h)}
-              style={{
-                background: horizon === h ? "var(--blue)" : "var(--surface2)",
-                color: horizon === h ? "#fff" : "var(--text3)",
-                border: "none", padding: "4px 9px", borderRadius: 6,
-                fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              {h < 12 ? `${h} měs.` : `${h / 12} ${h === 12 ? "rok" : "roky"}`}
-            </button>
-          ))}
+          {HORIZONS.map(h => {
+            const disabled = h > maxMonths;
+            return (
+              <button
+                key={h}
+                onClick={() => !disabled && setHorizon(h)}
+                disabled={disabled}
+                title={disabled ? `Nad rámec spolehlivého odhadu (max ${maxYears} let)` : undefined}
+                style={{
+                  background: horizon === h ? "var(--blue)" : "var(--surface2)",
+                  color: horizon === h ? "#fff" : disabled ? "var(--border)" : "var(--text3)",
+                  border: "none", padding: "4px 9px", borderRadius: 6,
+                  fontSize: 11, fontWeight: 700, fontFamily: "inherit",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  opacity: disabled ? 0.45 : 1,
+                }}
+              >
+                {h < 12 ? `${h} měs.` : `${h / 12} ${h === 12 ? "rok" : h / 12 < 5 ? "roky" : "let"}`}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Hlavní odhad */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600, marginBottom: 3 }}>
-          Odhad na {addMonths(lastYm, horizon)}
+          Odhad na {addMonths(lastYm, effHorizon)}
         </div>
         <div className="mono" style={{
           fontSize: 24, fontWeight: 800,
@@ -169,7 +197,7 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
             fontSize: 13, fontWeight: 700,
             color: growing ? "var(--green)" : "var(--red)",
           }}>
-            {growing ? "+" : "−"}{fmtKc(Math.abs(slope))}
+            {growing ? "+" : "−"}{fmtKc(Math.round(Math.abs(slope)))}
           </div>
         </div>
         <div>
@@ -179,7 +207,7 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: reliability.color }}>
             {reliability.label}
             <span style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600, marginLeft: 4 }}>
-              R² {r2.toFixed(2)}
+              R² {r2.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>
@@ -191,25 +219,29 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
           <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 600, marginBottom: 6 }}>
             MILNÍKY
           </div>
-          {milestoneEta.map(m => {
-            const years = (m.months / 12).toFixed(1);
-            return (
-              <div key={m.target} style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                fontSize: 12, padding: "4px 0",
-              }}>
-                <span className="mono" style={{ color: "var(--text2)", fontWeight: 700 }}>
-                  {m.label}
+          {milestoneEta.map(m => (
+            <div key={m.target} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              fontSize: 12, padding: "4px 0",
+              opacity: m.beyond ? 0.5 : 1,
+            }}>
+              <span className="mono" style={{ color: "var(--text2)", fontWeight: 700 }}>
+                {m.label}
+              </span>
+              {m.beyond ? (
+                <span style={{ color: "var(--text3)", fontWeight: 600, fontSize: 11 }}>
+                  za {maxYears}+ let · mimo odhad
                 </span>
+              ) : (
                 <span className="mono" style={{ color: "var(--blue)", fontWeight: 700 }}>
                   {m.eta}
                   <span style={{ color: "var(--text3)", fontWeight: 600, marginLeft: 5, fontSize: 10 }}>
-                    ({m.months < 24 ? `${m.months} měs.` : `${years} let`})
+                    ({fmtHorizon(m.months)})
                   </span>
                 </span>
-              </div>
-            );
-          })}
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -222,23 +254,30 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
           {goalEta.map(g => (
             <div key={g.id} style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
-              fontSize: 12, padding: "3px 0",
+              fontSize: 12, padding: "4px 0",
+              opacity: g.beyond ? 0.5 : 1,
             }}>
               <span style={{ color: "var(--text2)", fontWeight: 600 }}>{g.name}</span>
-              <span className="mono" style={{ color: "var(--blue)", fontWeight: 700 }}>
-                {g.eta}
-                <span style={{ color: "var(--text3)", fontWeight: 600, marginLeft: 5, fontSize: 10 }}>
-                  ({g.months} měs.)
+              {g.beyond ? (
+                <span style={{ color: "var(--text3)", fontWeight: 600, fontSize: 11 }}>
+                  za {maxYears}+ let · mimo odhad
                 </span>
-              </span>
+              ) : (
+                <span className="mono" style={{ color: "var(--blue)", fontWeight: 700 }}>
+                  {g.eta}
+                  <span style={{ color: "var(--text3)", fontWeight: 600, marginLeft: 5, fontSize: 10 }}>
+                    ({fmtHorizon(g.months)})
+                  </span>
+                </span>
+              )}
             </div>
           ))}
         </div>
       )}
 
       <div style={{ fontSize: 9, color: "var(--text3)", marginTop: 10, fontStyle: "italic", lineHeight: 1.4 }}>
-        Lineární extrapolace z {n} měsíců historie. Není to předpověď — trh se mění
-        a minulý růst nezaručuje budoucí.
+        Lineární extrapolace z {n} měsíců historie, spolehlivý horizont ~{maxYears} let.
+        Model počítá jen s dosavadním tempem — neúročí výnosy a nezná budoucnost trhu.
       </div>
     </div>
   );
