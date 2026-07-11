@@ -1,8 +1,10 @@
 import React, { useRef, useState } from "react";
+import { useConfirm } from "./ConfirmDialog";
 
 export default function NavBar({ dark, onToggleDark, onExport, onImport, onOpenAdmin, onOpenDiagnostics, syncing, sheetsOk, page, onChangePage }) {
   const fileRef = useRef();
   const [menuOpen, setMenuOpen] = useState(false);
+  const confirm = useConfirm();
 
   const menuItems = [
     { label: dark ? "Světlý mód" : "Tmavý mód", icon: dark ? "☀️" : "🌙", action: onToggleDark },
@@ -10,9 +12,9 @@ export default function NavBar({ dark, onToggleDark, onExport, onImport, onOpenA
     { label: "Import dat",       icon: "⬆️", action: () => fileRef.current?.click() },
     { label: "Správa kategorií", icon: "⚙️", action: onOpenAdmin },
     { label: "Diagnostika",      icon: "🔬", action: onOpenDiagnostics },
-    { label: "Vymazat lokální data", icon: "🗑️", action: () => { 
-      if (window.confirm("Smazat všechna lokální data? (Sheets zůstanou nedotčeny)")) {
-        localStorage.clear(); 
+    { label: "Vymazat lokální data", icon: "🗑️", action: async () => {
+      if (await confirm("Smazat všechna lokální data? Google Sheets zůstanou nedotčeny a data se znovu načtou při příštím spuštění.", { title: "Vymazat lokální data", confirmLabel: "Vymazat" })) {
+        localStorage.clear();
         window.location.reload();
       }
     }},
@@ -134,7 +136,7 @@ export default function NavBar({ dark, onToggleDark, onExport, onImport, onOpenA
                 onMouseEnter={e => e.currentTarget.style.background = "var(--surface2)"}
                 onMouseLeave={e => e.currentTarget.style.background = "none"}
               >
-                <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{item.icon}</span>
+                <span aria-hidden="true" style={{ fontSize: 18, width: 24, textAlign: "center" }}>{item.icon}</span>
                 {item.label}
               </button>
             ))}
