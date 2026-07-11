@@ -52,11 +52,24 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
 
   // Spočítej čisté jmění pro každý měsíc z per-item history
   const months = [...availableMonths].reverse();
-  const allPoints = months.map(ym => {
+  const allPoints = months.map((ym, idx, arr) => {
     const tA = aktiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const tP = pasiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === ym); return s + (h ? h.value : 0); }, 0);
     const [y, m] = ym.split("-");
-    return { ym, nw: tA - tP, label: `${parseInt(m)}/${y.slice(2)}`, year: y };
+    const nw = tA - tP;
+
+    // Změna oproti předchozímu měsíci (v rámci celé historie, ne jen filtru)
+    let momDiff = null, momPct = null;
+    if (idx > 0) {
+      const prevYm = arr[idx - 1];
+      const prevA = aktiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === prevYm); return s + (h ? h.value : 0); }, 0);
+      const prevP = pasiva.reduce((s, item) => { const h = (item.history||[]).find(x => x.date === prevYm); return s + (h ? h.value : 0); }, 0);
+      const prevNW = prevA - prevP;
+      momDiff = nw - prevNW;
+      momPct = prevNW !== 0 ? ((momDiff / prevNW) * 100).toFixed(1) : null;
+    }
+
+    return { ym, nw, tA, tP, momDiff, momPct, label: `${parseInt(m)}/${y.slice(2)}`, year: y };
   });
   
   // Filtruj podle výběru
@@ -311,6 +324,72 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
             })()}
           </svg>
         </div>
+
+        {/* Detail vybraného měsíce */}
+        {(() => {
+          const sel = points.find(p => p.ym === selectedMonth);
+          if (!sel) {
+            return (
+              <div style={{
+                marginTop: 10, padding: "8px 12px", fontSize: 11,
+                color: "var(--text3)", textAlign: "center",
+              }}>
+                Klikni na bod v grafu pro detail měsíce
+              </div>
+            );
+          }
+
+          const up = sel.momDiff != null && sel.momDiff >= 0;
+          return (
+            <div style={{
+              marginTop: 12,
+              padding: "12px 14px",
+              background: "var(--surface2)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+            }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                marginBottom: 10,
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)" }}>
+                  {sel.label.replace("/", "/20")}
+                </span>
+                {sel.momDiff != null && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 5,
+                    background: up ? "rgba(52,199,89,0.15)" : "rgba(255,59,48,0.15)",
+                    color: up ? "var(--green)" : "var(--red)",
+                  }}>
+                    {up ? "↑" : "↓"} {fmtKc(Math.abs(sel.momDiff))}
+                    {sel.momPct != null && ` (${Math.abs(sel.momPct)} %)`}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 600, marginBottom: 2 }}>AKTIVA</div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: "var(--green)" }}>
+                    {fmtKc(sel.tA)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 600, marginBottom: 2 }}>PASIVA</div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: "var(--red)" }}>
+                    −{fmtKc(sel.tP)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 600, marginBottom: 2 }}>ČISTÉ JMĚNÍ</div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 800, color: "var(--blue)" }}>
+                    {fmtKc(sel.nw)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
