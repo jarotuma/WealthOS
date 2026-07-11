@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { fmtKc } from "../utils/format";
+import { fmtKc, fmtM } from "../utils/format";
+import { useConfirm } from "./ConfirmDialog";
 
 // ── History Chart ─────────────────────────────────────────────
 export function HistoryChart({ aktiva, pasiva, availableMonths }) {
@@ -152,12 +153,15 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
         <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
           <svg 
             viewBox="0 0 700 160" 
+            role="img"
+            aria-label={`Graf vývoje čistého jmění. ${points.length} měsíců, od ${points[0]?.nw ? fmtKc(points[0].nw) : "?"} do ${points[points.length-1]?.nw ? fmtKc(points[points.length-1].nw) : "?"}.`}
             style={{ 
               width: "100%", 
               minWidth: points.length > 6 ? `${points.length * 60}px` : "100%",
               height: "160px"
             }}
           >
+            <title>Vývoj čistého jmění v čase</title>
             {/* Grid lines */}
             {[0.25, 0.5, 0.75].map((f, i) => (
               <line
@@ -222,7 +226,20 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
                     const isLast = i === points.length - 1;
                     const isSelected = selectedMonth === c.ym;
                     const isActive = isSelected || isLast;
-                    
+
+                    // Zobraz hodnotu nad bodem, jen když se popisky nepřekryjí:
+                    // - málo bodů (≤6): u všech
+                    // - více bodů: jen u vybraného nebo posledního
+                    // - navíc při hodně bodech zkrať na "M" formát
+                    const showValue = points.length <= 6 || isActive;
+                    const valueLabel = points.length > 8
+                      ? fmtM(c.nw)
+                      : fmtKc(c.nw);
+
+                    // X-axis: při velkém počtu bodů zobraz jen každý n-tý label
+                    const labelStep = points.length > 12 ? 3 : (points.length > 8 ? 2 : 1);
+                    const showXLabel = isActive || i % labelStep === 0;
+
                     return (
                       <g key={c.ym}>
                         {/* Larger invisible hitbox for easier clicking */}
@@ -257,31 +274,35 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
                           }}
                         />
                         
-                        {/* Value label above each point - always visible */}
-                        <text
-                          x={c.x}
-                          y={c.y - 12}
-                          textAnchor="middle"
-                          fill="var(--text3)"
-                          fontSize="10"
-                          fontWeight="600"
-                          fontFamily="Nunito Sans, system-ui, sans-serif"
-                        >
-                          {fmtKc(c.nw)}
-                        </text>
+                        {/* Value label - jen když se nepřekryje */}
+                        {showValue && (
+                          <text
+                            x={c.x}
+                            y={c.y - 12}
+                            textAnchor="middle"
+                            fill={isActive ? "var(--blue)" : "var(--text3)"}
+                            fontSize="10"
+                            fontWeight={isActive ? "700" : "600"}
+                            fontFamily="Nunito Sans, system-ui, sans-serif"
+                          >
+                            {valueLabel}
+                          </text>
+                        )}
                         
                         {/* X-axis labels */}
-                        <text
-                          x={c.x}
-                          y={height + 8}
-                          textAnchor="middle"
-                          fill={isActive ? "var(--blue)" : "var(--text3)"}
-                          fontSize="9"
-                          fontWeight="600"
-                          fontFamily="Nunito Sans, system-ui, sans-serif"
-                        >
-                          {c.label}
-                        </text>
+                        {showXLabel && (
+                          <text
+                            x={c.x}
+                            y={height + 8}
+                            textAnchor="middle"
+                            fill={isActive ? "var(--blue)" : "var(--text3)"}
+                            fontSize="9"
+                            fontWeight="600"
+                            fontFamily="Nunito Sans, system-ui, sans-serif"
+                          >
+                            {c.label}
+                          </text>
+                        )}
                       </g>
                     );
                   })}
@@ -299,8 +320,11 @@ export function HistoryChart({ aktiva, pasiva, availableMonths }) {
 function PieSVG({ data, size = 110, label }) {
   const cx = size/2, cy = size/2, r = size/2 - 8;
   let start = -Math.PI / 2;
+  const ariaDesc = data.map(d => `${d.label} ${d.pct}%`).join(", ");
   return (
-    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+    <svg width={size} height={size} style={{ flexShrink: 0 }}
+      role="img" aria-label={`${label || "Rozložení"}: ${ariaDesc}`}>
+      <title>{label || "Rozložení portfolia"}</title>
       {data.map((d, i) => {
         const angle = (d.pct / 100) * 2 * Math.PI;
         if (angle < 0.01) return null;
@@ -444,9 +468,12 @@ function GoalForm({ goal, onSave, onCancel }) {
 export function GoalsSection({ goals, netWorth, onUpdateGoals }) {
   const [editId,    setEditId]   = useState(null);
   const [showAdd,   setShowAdd]  = useState(false);
+  const confirm = useConfirm();
 
-  const deleteGoal = (id) => {
-    if (window.confirm("Smazat tento cíl?")) onUpdateGoals(goals.filter(g => g.id !== id));
+  const deleteGoal = async (id) => {
+    if (await confirm("Opravdu smazat tento cíl?", { title: "Smazat cíl", confirmLabel: "Smazat" })) {
+      onUpdateGoals(goals.filter(g => g.id !== id));
+    }
   };
   const saveEdit = (updated) => {
     onUpdateGoals(goals.map(g => g.id === updated.id ? updated : g));
