@@ -94,6 +94,23 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
     .filter(g => !g.reached && g.months)
     .slice(0, 3);
 
+  // Kulaté milníky — kdy překročím 5 / 10 / 15 / 20 M Kč
+  const MILESTONES = [5_000_000, 10_000_000, 15_000_000, 20_000_000];
+  const milestoneEta = MILESTONES
+    .filter(target => target > netWorth)
+    .map(target => {
+      if (slope <= 0) return null;
+      const months = Math.ceil((target - netWorth) / slope);
+      if (months > 600) return null; // >50 let = nesmysl
+      return {
+        target,
+        months,
+        eta: addMonths(lastYm, months),
+        label: `${target / 1_000_000} M Kč`,
+      };
+    })
+    .filter(Boolean);
+
   const HORIZONS = [6, 12, 36];
 
   return (
@@ -167,6 +184,34 @@ export function NetWorthProjection({ historyData, netWorth, goals = [] }) {
           </div>
         </div>
       </div>
+
+      {/* Kulaté milníky */}
+      {milestoneEta.length > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+          <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 600, marginBottom: 6 }}>
+            MILNÍKY
+          </div>
+          {milestoneEta.map(m => {
+            const years = (m.months / 12).toFixed(1);
+            return (
+              <div key={m.target} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                fontSize: 12, padding: "4px 0",
+              }}>
+                <span className="mono" style={{ color: "var(--text2)", fontWeight: 700 }}>
+                  {m.label}
+                </span>
+                <span className="mono" style={{ color: "var(--blue)", fontWeight: 700 }}>
+                  {m.eta}
+                  <span style={{ color: "var(--text3)", fontWeight: 600, marginLeft: 5, fontSize: 10 }}>
+                    ({m.months < 24 ? `${m.months} měs.` : `${years} let`})
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Kdy dosáhnu cílů */}
       {goalEta.length > 0 && (
