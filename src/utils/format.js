@@ -12,6 +12,17 @@ export function fmtKc(n) {
   return num.toLocaleString("cs-CZ") + " Kč";
 }
 
+/** Kompaktní pro grafy: 1 752 000 → "1,8 M"  |  842 000 → "842 K"  |  500 → "500" */
+export function fmtM(n) {
+  const num = Number(n) || 0;
+  const abs = Math.abs(num);
+  if (abs >= 1_000_000)
+    return (num / 1_000_000).toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " M";
+  if (abs >= 10_000)
+    return Math.round(num / 1_000).toLocaleString("cs-CZ") + " K";
+  return num.toLocaleString("cs-CZ");
+}
+
 /** Čisté číslo pro hero nadpis: 1 752 000  →  "1,75 M"  |  142 000  →  "142 000" */
 export function fmtShort(n) {
   const num = Number(n) || 0;
