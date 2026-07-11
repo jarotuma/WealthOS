@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { loadAll, addItem, updateItem, deleteItem, saveGoals, saveAll, getMeta } from "../api/sheets";
 import { todayYM } from "../utils/format";
 
@@ -6,6 +6,15 @@ const DEV = import.meta.env.DEV;
 
 const DEFAULT_CATS_A = ["Bankovní účet","Akcie","ETF","Krypto","Nemovitost","Automobil","Dluhopisy","Zlato / kovy","Hotovost","Jiné investice","Ostatní"];
 const DEFAULT_CATS_P = ["Hypotéka","Spotřební půjčka","Kreditní karta","Leasing","Studentská půjčka","Jiný dluh","Ostatní"];
+
+// Nelikvidní kategorie — nepočítají se do "Likvidní krytí dluhů".
+// Položku lze označit i ručně přes item.illiquid = true (má přednost).
+const ILLIQUID_CATS = ["Nemovitost", "Automobil"];
+
+function isIlliquid(item) {
+  if (typeof item.illiquid === "boolean") return item.illiquid;
+  return ILLIQUID_CATS.some(c => (item.cat || "").toLowerCase().includes(c.toLowerCase()));
+}
 
 const LS_KEY = "wealthos_v4";
 
@@ -490,114 +499,109 @@ export function useData() {
   }, [showToast]);
 
   // ── Computed ──────────────────────────────────────────────
-  const totalA   = aktiva.reduce((s, i) => s + Number(i.value), 0);
-  const totalP   = pasiva.reduce((s, i) => s + Number(i.value), 0);
-  const netWorth = totalA - totalP;
+  // Vše odvozené z aktiv/pasiv se počítá jen když se aktiva/pasiva změní,
+  // ne při každém renderu (toast, syncing, atd.).
+  const computed = useMemo(() => {
+    const totalA   = aktiva.reduce((s, i) => s + Number(i.value), 0);
+    const totalP   = pasiva.reduce((s, i) => s + Number(i.value), 0);
+    const netWorth = totalA - totalP;
 
-  const allDates = [...new Set([
-    ...aktiva.flatMap(i => (i.history || []).map(h => h.date)),
-    ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
-  ])].sort();
-  const prevMonth = allDates.length >= 2 ? allDates[allDates.length - 2] : null;
-  const prevNW = prevMonth
-    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
-    - pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
-    : netWorth;
-  const diff    = netWorth - prevNW;
-  const diffPct = prevNW !== 0 ? ((diff / prevNW) * 100).toFixed(1) : "0.0";
-
-  // YTD (Year-to-date) calculation
-  const currentYear = new Date().getFullYear().toString();
-  const ytdStartMonth = allDates.find(d => d.startsWith(currentYear + "-"));
-  const ytdStartNW = ytdStartMonth
-    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === ytdStartMonth); return s + (h ? h.value : 0); }, 0)
-    - pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === ytdStartMonth); return s + (h ? h.value : 0); }, 0)
-    : netWorth;
-  const ytdDiff = netWorth - ytdStartNW;
-  const ytdDiffPct = ytdStartNW !== 0 ? ((ytdDiff / ytdStartNW) * 100).toFixed(1) : "0.0";
-
-  // YoY (Year-over-Year) - porovná stejný měsíc minulého roku
-  const currentYM = todayYM(); // např. "2026-04"
-  const [year, month] = currentYM.split("-");
-  const lastYearSameMonth = `${parseInt(year) - 1}-${month}`; // např. "2025-04"
-  
-  const yoyMonth = allDates.includes(lastYearSameMonth) ? lastYearSameMonth : null;
-  
-  // MoM a YoY pro aktiva a pasiva zvlášť
-  const prevTotalA = prevMonth
-    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
-    : totalA;
-  const prevTotalP = prevMonth
-    ? pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === prevMonth); return s + (h ? h.value : 0); }, 0)
-    : totalP;
-  
-  const aktivaMoM = totalA - prevTotalA;
-  const aktivaMoMPct = prevTotalA !== 0 ? ((aktivaMoM / prevTotalA) * 100).toFixed(1) : "0.0";
-  const pasivaMoM = totalP - prevTotalP;
-  const pasivaMoMPct = prevTotalP !== 0 ? ((pasivaMoM / prevTotalP) * 100).toFixed(1) : "0.0";
-
-  const yoyTotalA = yoyMonth
-    ? aktiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === yoyMonth); return s + (h ? h.value : 0); }, 0)
-    : totalA;
-  const yoyTotalP = yoyMonth
-    ? pasiva.reduce((s, i) => { const h = (i.history || []).find(x => x.date === yoyMonth); return s + (h ? h.value : 0); }, 0)
-    : totalP;
-  
-  const aktivaYoY = totalA - yoyTotalA;
-  const aktivaYoYPct = yoyTotalA !== 0 ? ((aktivaYoY / yoyTotalA) * 100).toFixed(1) : "0.0";
-  const pasivaYoY = totalP - yoyTotalP;
-  const pasivaYoYPct = yoyTotalP !== 0 ? ((pasivaYoY / yoyTotalP) * 100).toFixed(1) : "0.0";
-
-  // Finanční indikátory
-  // 1. Celkový poměr A/P (Asset to Liability Ratio)
-  const assetLiabilityRatio = totalP > 0 ? (totalA / totalP).toFixed(2) : "∞";
-  
-  // 2. Likvidní krytí dluhů (bez nemovitostí)
-  const nemovitostiValue = aktiva
-    .filter(i => i.cat?.toLowerCase().includes("nemovitost"))
-    .reduce((s, i) => s + Number(i.value), 0);
-  const liquidAssets = totalA - nemovitostiValue;
-  const liquidityCoverageRatio = totalP > 0 ? (liquidAssets / totalP).toFixed(2) : "∞";
-
-  // Obohať položky o MoM a YoY data
-  const aktivaWithChanges = enrichWithChanges(aktiva, prevMonth, yoyMonth);
-  const pasivaWithChanges = enrichWithChanges(pasiva, prevMonth, yoyMonth);
-
-  const availableMonths = [...new Set([
-    ...aktiva.flatMap(i => (i.history || []).map(h => h.date)),
-    ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
-  ])].sort().reverse();
-
-  // Historie pro graf - pro každý měsíc spočítej totalA, totalP, netWorth
-  const historyData = availableMonths.map(date => {
-    const monthTotalA = aktiva.reduce((sum, item) => {
-      const h = (item.history || []).find(x => x.date === date);
-      return sum + (h ? h.value : 0);
+    // Helper: součet hodnot položek pro daný měsíc
+    const sumAt = (items, ym) => items.reduce((s, i) => {
+      const h = (i.history || []).find(x => x.date === ym);
+      return s + (h ? h.value : 0);
     }, 0);
-    const monthTotalP = pasiva.reduce((sum, item) => {
-      const h = (item.history || []).find(x => x.date === date);
-      return sum + (h ? h.value : 0);
-    }, 0);
+
+    const allDates = [...new Set([
+      ...aktiva.flatMap(i => (i.history || []).map(h => h.date)),
+      ...pasiva.flatMap(i => (i.history || []).map(h => h.date)),
+    ])].sort();
+
+    const prevMonth = allDates.length >= 2 ? allDates[allDates.length - 2] : null;
+    const prevNW = prevMonth ? sumAt(aktiva, prevMonth) - sumAt(pasiva, prevMonth) : netWorth;
+    const diff    = netWorth - prevNW;
+    const diffPct = prevNW !== 0 ? ((diff / prevNW) * 100).toFixed(1) : "0.0";
+
+    // YTD (Year-to-date)
+    const currentYear = new Date().getFullYear().toString();
+    const ytdStartMonth = allDates.find(d => d.startsWith(currentYear + "-"));
+    const ytdStartNW = ytdStartMonth
+      ? sumAt(aktiva, ytdStartMonth) - sumAt(pasiva, ytdStartMonth)
+      : netWorth;
+    const ytdDiff = netWorth - ytdStartNW;
+    const ytdDiffPct = ytdStartNW !== 0 ? ((ytdDiff / ytdStartNW) * 100).toFixed(1) : "0.0";
+
+    // YoY (Year-over-Year) — stejný měsíc minulého roku
+    const currentYM = todayYM();
+    const [year, month] = currentYM.split("-");
+    const lastYearSameMonth = `${parseInt(year) - 1}-${month}`;
+    const yoyMonth = allDates.includes(lastYearSameMonth) ? lastYearSameMonth : null;
+
+    // MoM a YoY pro aktiva a pasiva zvlášť
+    const prevTotalA = prevMonth ? sumAt(aktiva, prevMonth) : totalA;
+    const prevTotalP = prevMonth ? sumAt(pasiva, prevMonth) : totalP;
+    const aktivaMoM = totalA - prevTotalA;
+    const aktivaMoMPct = prevTotalA !== 0 ? ((aktivaMoM / prevTotalA) * 100).toFixed(1) : "0.0";
+    const pasivaMoM = totalP - prevTotalP;
+    const pasivaMoMPct = prevTotalP !== 0 ? ((pasivaMoM / prevTotalP) * 100).toFixed(1) : "0.0";
+
+    const yoyTotalA = yoyMonth ? sumAt(aktiva, yoyMonth) : totalA;
+    const yoyTotalP = yoyMonth ? sumAt(pasiva, yoyMonth) : totalP;
+    const aktivaYoY = totalA - yoyTotalA;
+    const aktivaYoYPct = yoyTotalA !== 0 ? ((aktivaYoY / yoyTotalA) * 100).toFixed(1) : "0.0";
+    const pasivaYoY = totalP - yoyTotalP;
+    const pasivaYoYPct = yoyTotalP !== 0 ? ((pasivaYoY / yoyTotalP) * 100).toFixed(1) : "0.0";
+
+    // Finanční indikátory
+    const assetLiabilityRatio = totalP > 0 ? (totalA / totalP).toFixed(2) : "∞";
+
+    // Likvidní krytí dluhů — vyloučí nelikvidní položky (nemovitosti, auta…)
+    const illiquidValue = aktiva
+      .filter(isIlliquid)
+      .reduce((s, i) => s + Number(i.value), 0);
+    const liquidAssets = totalA - illiquidValue;
+    const liquidityCoverageRatio = totalP > 0 ? (liquidAssets / totalP).toFixed(2) : "∞";
+
+    // Obohať položky o MoM a YoY data
+    const aktivaWithChanges = enrichWithChanges(aktiva, prevMonth, yoyMonth);
+    const pasivaWithChanges = enrichWithChanges(pasiva, prevMonth, yoyMonth);
+
+    const availableMonths = [...allDates].reverse();
+
+    // Historie pro graf
+    const historyData = availableMonths.map(date => {
+      const monthTotalA = sumAt(aktiva, date);
+      const monthTotalP = sumAt(pasiva, date);
+      return { date, totalA: monthTotalA, totalP: monthTotalP, netWorth: monthTotalA - monthTotalP };
+    }).reverse();
+
     return {
-      date,
-      totalA: monthTotalA,
-      totalP: monthTotalP,
-      netWorth: monthTotalA - monthTotalP,
+      totalA, totalP, netWorth, diff, diffPct,
+      ytdDiff, ytdDiffPct,
+      aktivaMoM, aktivaMoMPct, pasivaMoM, pasivaMoMPct,
+      aktivaYoY, aktivaYoYPct, pasivaYoY, pasivaYoYPct,
+      assetLiabilityRatio, liquidityCoverageRatio,
+      aktivaWithChanges, pasivaWithChanges,
+      availableMonths, historyData,
     };
-  }).reverse(); // reverse aby byl chronologický (nejstarší první)
+  }, [aktiva, pasiva]);
 
   return {
-    aktiva: aktivaWithChanges, 
-    pasiva: pasivaWithChanges, 
+    aktiva: computed.aktivaWithChanges,
+    pasiva: computed.pasivaWithChanges,
     goals, catsA, catsP,
     loading, syncing, toast, sheetsOk,
-    totalA, totalP, netWorth, diff, diffPct,
-    ytdDiff, ytdDiffPct,
-    aktivaMoM, aktivaMoMPct, pasivaMoM, pasivaMoMPct,
-    aktivaYoY, aktivaYoYPct, pasivaYoY, pasivaYoYPct,
-    assetLiabilityRatio, liquidityCoverageRatio,
-    availableMonths,
-    historyData,
+    totalA: computed.totalA, totalP: computed.totalP, netWorth: computed.netWorth,
+    diff: computed.diff, diffPct: computed.diffPct,
+    ytdDiff: computed.ytdDiff, ytdDiffPct: computed.ytdDiffPct,
+    aktivaMoM: computed.aktivaMoM, aktivaMoMPct: computed.aktivaMoMPct,
+    pasivaMoM: computed.pasivaMoM, pasivaMoMPct: computed.pasivaMoMPct,
+    aktivaYoY: computed.aktivaYoY, aktivaYoYPct: computed.aktivaYoYPct,
+    pasivaYoY: computed.pasivaYoY, pasivaYoYPct: computed.pasivaYoYPct,
+    assetLiabilityRatio: computed.assetLiabilityRatio,
+    liquidityCoverageRatio: computed.liquidityCoverageRatio,
+    availableMonths: computed.availableMonths,
+    historyData: computed.historyData,
     addAktivum, updateAktivum, deleteAktivum,
     updateAktivumHistory, deleteAktivumHistory,
     addPasivum, updatePasivum, deletePasivum,
