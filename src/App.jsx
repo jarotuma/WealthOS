@@ -5,6 +5,7 @@ import { HeroSection, StatCards, FinancialRatios } from "./components/Widgets";
 import { MarketPrices } from "./components/MarketPrices";
 import AssetList from "./components/AssetList";
 import { HistoryChart, PieCharts, GoalsSection } from "./components/Charts";
+import { NetWorthProjection } from "./components/Projection";
 import AdminPanel from "./components/AdminPanel";
 import HistoryPage from "./components/HistoryPage";
 import Diagnostics from "./components/Diagnostics";
@@ -99,6 +100,9 @@ export default function App() {
 
           <div className="section-label">Historie čistého jmění</div>
           <HistoryChart aktiva={aktiva} pasiva={pasiva} availableMonths={availableMonths} />
+
+          <div className="section-label">Výhled</div>
+          <NetWorthProjection historyData={historyData} netWorth={netWorth} goals={goals} />
 
           <div className="section-label">Rozložení portfolia <small>Asset Allocation</small></div>
           <PieCharts aktiva={aktiva} pasiva={pasiva} />
